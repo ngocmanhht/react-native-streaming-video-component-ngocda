@@ -1,0 +1,72 @@
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath "com.android.tools.build:gradle:8.2.1"
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.22"
+    }
+}
+
+apply plugin: "com.android.library"
+apply plugin: "kotlin-android"
+
+android {
+    namespace "com.streamingvideongocda"
+    compileSdk 34
+
+    defaultConfig {
+        minSdk 23
+        targetSdk 34
+
+        externalNativeBuild {
+            cmake {
+                cppFlags "-O2 -frtti -fexceptions -Wall -fstack-protector-all"
+                abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+        }
+    }
+
+    buildFeatures {
+        prefab true
+    }
+
+    packagingOptions {
+        pickFirst "**/libc++_shared.so"
+    }
+
+    kotlinOptions {
+        jvmTarget = "1.8"
+    }
+}
+
+repositories {
+    google()
+    mavenCentral()
+}
+
+dependencies {
+    implementation "com.facebook.react:react-android"
+    implementation "com.margelo.nitro:core:+"
+
+    // ExoPlayer / Media3
+    implementation "androidx.media3:media3-exoplayer:1.4.1"
+    implementation "androidx.media3:media3-exoplayer-rtsp:1.4.1"
+    implementation "androidx.media3:media3-exoplayer-hls:1.4.1"
+    implementation "androidx.media3:media3-ui:1.4.1"
+
+    // LibVLC - RTSP exotic fallback
+    implementation "org.videolan.android:libvlc-all:3.6.0"
+}
+
+// Nitrogen Autolinking
+if (file("../nitrogen/generated/android/StreamingVideoComponentNgocda+autolinking.gradle").exists()) {
+    apply from: "../nitrogen/generated/android/StreamingVideoComponentNgocda+autolinking.gradle"
+}

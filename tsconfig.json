@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "esnext",
+    "lib": ["esnext"],
+    "allowJs": true,
+    "jsx": "react-native",
+    "isolatedModules": true,
+    "strict": true,
+    "moduleResolution": "node",
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "rootDir": "src",
+    "noEmit": false,
+    "declaration": true,
+    "paths": {
+      "*": ["src/*"]
+    }
+  },
+  "exclude": [
+    "node_modules",
+    "lib",
+    "android",
+    "ios",
+    "cpp",
+    "example"
+  ]
+}

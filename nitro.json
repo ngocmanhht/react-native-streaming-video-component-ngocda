@@ -1,0 +1,21 @@
+{
+  "cxxNamespace": [
+    "streamingvideo"
+  ],
+  "ios": {
+    "iosModuleName": "react_native_streaming_video_component_ngocda"
+  },
+  "android": {
+    "androidNamespace": [
+      "com",
+      "streamingvideongocda"
+    ],
+    "androidCxxLibName": "StreamingVideoComponentNgocda"
+  },
+  "autolinking": {
+    "VideoPlayerView": {
+      "swift": "HybridVideoPlayerView",
+      "kotlin": "com.streamingvideongocda.HybridVideoPlayerView"
+    }
+  }
+}

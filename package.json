@@ -1,0 +1,99 @@
+{
+  "name": "react-native-streaming-video-component-ngocda",
+  "version": "0.1.0",
+  "description": "High-performance streaming video component for React Native (HLS & RTSP)",
+  "main": "lib/commonjs/index",
+  "module": "lib/module/index",
+  "types": "lib/typescript/index.d.ts",
+  "react-native": "src/index",
+  "source": "src/index",
+  "files": [
+    "src",
+    "lib",
+    "android",
+    "ios",
+    "cpp",
+    "*.podspec",
+    "!lib/typescript/example",
+    "!ios/build",
+    "!android/build",
+    "nitro.json"
+  ],
+  "scripts": {
+    "codegen": "npx nitrogen",
+    "test": "jest",
+    "typecheck": "tsc --noEmit",
+    "prepare": "bob build",
+    "lint": "eslint \"src/**/*.{ts,tsx}\"",
+    "format": "prettier --write \"src/**/*.{ts,tsx}\""
+  },
+  "keywords": [
+    "react-native",
+    "ios",
+    "android",
+    "video",
+    "streaming",
+    "hls",
+    "rtsp",
+    "nitro"
+  ],
+  "repository": "https://github.com/ngocda/react-native-streaming-video-component-ngocda",
+  "author": "ngocda <ngocda@example.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/ngocda/react-native-streaming-video-component-ngocda/issues"
+  },
+  "homepage": "https://github.com/ngocda/react-native-streaming-video-component-ngocda#readme",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/"
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*",
+    "react-native-nitro-modules": "*",
+    "lucide-react-native": "*",
+    "react-native-reanimated": "*",
+    "react-native-gesture-handler": "*",
+    "react-native-svg": "*",
+    "@react-native-community/slider": "*"
+  },
+  "devDependencies": {
+    "@react-native/typescript-config": "^0.85.3",
+    "@types/react": "^19.2.14",
+    "@types/react-native": "^0.73.0",
+    "nitrogen": "0.35.0",
+    "react": "18.3.1",
+    "react-native": "0.76.0",
+    "react-native-builder-bob": "^0.30.0",
+    "react-native-nitro-modules": "0.35.6",
+    "typescript": "^5.0.0",
+    "eslint": "^8.57.0",
+    "prettier": "^3.2.5",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-react": "^7.34.1",
+    "eslint-plugin-react-native": "^4.1.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "@typescript-eslint/eslint-plugin": "^7.5.0",
+    "@typescript-eslint/parser": "^7.5.0",
+    "lucide-react-native": "*",
+    "react-native-reanimated": "*",
+    "react-native-gesture-handler": "*",
+    "react-native-svg": "*",
+    "react-native-orientation-locker": "*",
+    "@react-native-community/slider": "*"
+  },
+  "react-native-builder-bob": {
+    "source": "src",
+    "output": "lib",
+    "targets": [
+      "commonjs",
+      "module",
+      [
+        "typescript",
+        {
+          "project": "tsconfig.json"
+        }
+      ]
+    ]
+  }
+}
