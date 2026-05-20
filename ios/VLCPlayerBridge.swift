@@ -35,12 +35,16 @@ final class VLCPlayerBridge: NSObject, VLCMediaPlayerDelegate {
 
     guard let u = URL(string: url) else { return }
     let media = VLCMedia(url: u)
-    media.addOptions([
+    var mediaOptions: [String: Any] = [
       "rtsp-tcp": true,       // Force TCP – more reliable over NAT/firewall
       "network-caching": 300, // 300 ms network buffer – low latency
       "clock-jitter": 0,      // Disable clock jitter compensation for live streams
       "clock-synchro": 0,     // Disable A/V resync for live streams
-    ])
+    ]
+    #if targetEnvironment(simulator)
+    mediaOptions["avcodec-hw"] = "none" // Disable hardware decoding on simulator to fix SetupOutputFormat stack overflow crash
+    #endif
+    media.addOptions(mediaOptions)
     player.media = media
     // ARC will release 'media' local var here automatically – no manual release() needed
   }
