@@ -1,0 +1,24 @@
+{
+  "uiViewClassName": "VideoPlayerView",
+  "supportsRawText": false,
+  "bubblingEventTypes": {},
+  "directEventTypes": {},
+  "validAttributes": {
+    "url": true,
+    "streamProtocol": true,
+    "paused": true,
+    "resizeMode": true,
+    "volume": true,
+    "muted": true,
+    "shouldRepeat": true,
+    "progressInterval": true,
+    "zoomEnabled": true,
+    "onReady": true,
+    "onProgress": true,
+    "onBuffering": true,
+    "onStateChange": true,
+    "onError": true,
+    "onEnd": true,
+    "hybridRef": true
+  }
+}

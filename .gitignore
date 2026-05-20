@@ -7,7 +7,7 @@ yarn-error.log*
 .eslintcache
 
 # Build outputs
-lib/
+# lib/ is committed so GitHub installs work without a build step
 dist/
 
 # iOS
@@ -35,7 +35,7 @@ android/global.gradle
 !debug.keystore
 
 # Nitro Modules
-nitrogen/generated/
+# nitrogen/generated/ is committed so GitHub installs work without codegen step
 
 # IDE / Editors
 .vscode/
