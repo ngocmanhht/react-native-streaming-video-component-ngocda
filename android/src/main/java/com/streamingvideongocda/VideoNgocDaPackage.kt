@@ -6,11 +6,15 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.uimanager.ViewManager
 
 class VideoNgocDaPackage : ReactPackage {
+    init {
+        com.margelo.nitro.com.streamingvideongocda.StreamingVideoComponentNgocdaOnLoad.initializeNative()
+    }
+
     override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
         return emptyList()
     }
 
     override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> {
-        return emptyList()
+        return listOf(com.margelo.nitro.com.streamingvideongocda.views.HybridVideoPlayerViewManager())
     }
 }

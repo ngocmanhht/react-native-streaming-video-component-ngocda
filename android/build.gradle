@@ -11,18 +11,20 @@ buildscript {
 
 apply plugin: "com.android.library"
 apply plugin: "kotlin-android"
+apply plugin: "com.facebook.react"
 
 android {
     namespace "com.streamingvideongocda"
     compileSdk 34
 
     defaultConfig {
-        minSdk 23
+        minSdk 24
         targetSdk 34
 
         externalNativeBuild {
             cmake {
                 cppFlags "-O2 -frtti -fexceptions -Wall -fstack-protector-all"
+                arguments "-DANDROID_STL=c++_shared"
                 abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
             }
         }
@@ -30,7 +32,7 @@ android {
 
     externalNativeBuild {
         cmake {
-            path "src/main/cpp/CMakeLists.txt"
+            path "CMakeLists.txt"
         }
     }
 
@@ -42,8 +44,13 @@ android {
         pickFirst "**/libc++_shared.so"
     }
 
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
     kotlinOptions {
-        jvmTarget = "1.8"
+        jvmTarget = "17"
     }
 }
 
@@ -54,7 +61,7 @@ repositories {
 
 dependencies {
     implementation "com.facebook.react:react-android"
-    implementation "com.margelo.nitro:core:+"
+    implementation project(':react-native-nitro-modules')
 
     // ExoPlayer / Media3
     implementation "androidx.media3:media3-exoplayer:1.4.1"
@@ -69,4 +76,10 @@ dependencies {
 // Nitrogen Autolinking
 if (file("../nitrogen/generated/android/StreamingVideoComponentNgocda+autolinking.gradle").exists()) {
     apply from: "../nitrogen/generated/android/StreamingVideoComponentNgocda+autolinking.gradle"
+}
+
+react {
+    jsRootDir = file("../src/")
+    libraryName = "StreamingVideoComponentNgocda"
+    codegenJavaPackageName = "com.streamingvideongocda"
 }

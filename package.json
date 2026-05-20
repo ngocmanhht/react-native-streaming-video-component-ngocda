@@ -48,39 +48,42 @@
     "registry": "https://registry.npmjs.org/"
   },
   "peerDependencies": {
+    "@react-native-community/slider": "*",
+    "lucide-react-native": "*",
     "react": "*",
     "react-native": "*",
-    "react-native-nitro-modules": "*",
-    "lucide-react-native": "*",
-    "react-native-reanimated": "*",
     "react-native-gesture-handler": "*",
-    "react-native-svg": "*",
-    "@react-native-community/slider": "*"
+    "react-native-nitro-modules": "*",
+    "react-native-orientation-locker": "*",
+    "react-native-reanimated": "*",
+    "react-native-safe-area-context": "*",
+    "react-native-svg": "*"
   },
   "devDependencies": {
+    "@react-native-community/slider": "*",
     "@react-native/typescript-config": "^0.85.3",
     "@types/react": "^19.2.14",
     "@types/react-native": "^0.73.0",
+    "@typescript-eslint/eslint-plugin": "^7.5.0",
+    "@typescript-eslint/parser": "^7.5.0",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-react": "^7.34.1",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-native": "^4.1.0",
+    "lucide-react-native": "*",
     "nitrogen": "0.35.0",
+    "prettier": "^3.2.5",
     "react": "18.3.1",
     "react-native": "0.76.0",
     "react-native-builder-bob": "^0.30.0",
-    "react-native-nitro-modules": "0.35.6",
-    "typescript": "^5.0.0",
-    "eslint": "^8.57.0",
-    "prettier": "^3.2.5",
-    "eslint-config-prettier": "^9.1.0",
-    "eslint-plugin-react": "^7.34.1",
-    "eslint-plugin-react-native": "^4.1.0",
-    "eslint-plugin-react-hooks": "^4.6.0",
-    "@typescript-eslint/eslint-plugin": "^7.5.0",
-    "@typescript-eslint/parser": "^7.5.0",
-    "lucide-react-native": "*",
-    "react-native-reanimated": "*",
     "react-native-gesture-handler": "*",
-    "react-native-svg": "*",
+    "react-native-nitro-modules": "0.35.6",
     "react-native-orientation-locker": "*",
-    "@react-native-community/slider": "*"
+    "react-native-reanimated": "*",
+    "react-native-safe-area-context": "*",
+    "react-native-svg": "*",
+    "typescript": "^5.0.0"
   },
   "react-native-builder-bob": {
     "source": "src",
@@ -95,5 +98,6 @@
         }
       ]
     ]
-  }
+  },
+  "dependencies": {}
 }

@@ -1,8 +1,23 @@
 import React, { useCallback, useEffect, useRef, useState, type ComponentType, type FC } from 'react'
 import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native'
-import * as Lucide from 'lucide-react-native'
+import {
+  Play,
+  Pause,
+  Square,
+  RotateCcw,
+  RotateCw,
+  Volume2,
+  Volume1,
+  VolumeX,
+  Maximize,
+  Minimize,
+  ZoomIn,
+  ZoomOut,
+  Camera,
+} from 'lucide-react-native'
 import Reanimated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated'
 import Slider from '@react-native-community/slider'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { PlaybackState, StreamProtocol } from './VideoPlayer.nitro'
 import type { VideoPlayerState } from './useVideoPlayer'
 
@@ -45,10 +60,6 @@ export interface VideoControlsProps {
   onVolumeChange: (volume: number) => void
   onToggleMute: () => void
   onToggleFullscreen: () => void
-  // Zoom
-  zoomEnabled?: boolean
-  onZoomIn?: () => void
-  onZoomOut?: () => void
   // Capture
   showCameraButton?: boolean
   onCapture?: () => void
@@ -61,29 +72,28 @@ const FallbackIcon: FC<{ label: string } & IconProps> = ({ label, size = 20, col
 )
 FallbackIcon.displayName = 'FallbackIcon'
 
-const mkIcon = (lucideName: keyof typeof Lucide, emoji: string): ComponentType<IconProps> => {
-  const IconComponent: FC<IconProps> = p => {
-    const LIcon = Lucide[lucideName] as ComponentType<IconProps>
-    if (LIcon) return <LIcon {...p} />
+const mkIcon = (IconComponent: ComponentType<IconProps>, emoji: string): ComponentType<IconProps> => {
+  const WrappedIcon: FC<IconProps> = p => {
+    if (IconComponent) return <IconComponent {...p} />
     return <FallbackIcon label={emoji} {...p} />
   }
-  IconComponent.displayName = `Icon(${String(lucideName)})`
-  return IconComponent
+  WrappedIcon.displayName = `Icon(${IconComponent?.displayName || 'Unknown'})`
+  return WrappedIcon
 }
 
-const DefaultPlay: ComponentType<IconProps> = mkIcon('Play', '▶')
-const DefaultPause: ComponentType<IconProps> = mkIcon('Pause', '⏸')
-const DefaultStop: ComponentType<IconProps> = mkIcon('Square', '⏹')
-const DefaultSeekBack: ComponentType<IconProps> = mkIcon('RotateCcw', '↩')
-const DefaultSeekForward: ComponentType<IconProps> = mkIcon('RotateCw', '↪')
-const DefaultVolumeHigh: ComponentType<IconProps> = mkIcon('Volume2', '🔊')
-const DefaultVolumeLow: ComponentType<IconProps> = mkIcon('Volume1', '🔉')
-const DefaultVolumeMute: ComponentType<IconProps> = mkIcon('VolumeX', '🔇')
-const DefaultFullscreen: ComponentType<IconProps> = mkIcon('Maximize', '⛶')
-const DefaultExitFullscreen: ComponentType<IconProps> = mkIcon('Minimize', '⊠')
-const DefaultZoomIn: ComponentType<IconProps> = mkIcon('ZoomIn', '➕')
-const DefaultZoomOut: ComponentType<IconProps> = mkIcon('ZoomOut', '➖')
-const DefaultCamera: ComponentType<IconProps> = mkIcon('Camera', '📸')
+const DefaultPlay: ComponentType<IconProps> = mkIcon(Play, '▶')
+const DefaultPause: ComponentType<IconProps> = mkIcon(Pause, '⏸')
+const DefaultStop: ComponentType<IconProps> = mkIcon(Square, '⏹')
+const DefaultSeekBack: ComponentType<IconProps> = mkIcon(RotateCcw, '↩')
+const DefaultSeekForward: ComponentType<IconProps> = mkIcon(RotateCw, '↪')
+const DefaultVolumeHigh: ComponentType<IconProps> = mkIcon(Volume2, '🔊')
+const DefaultVolumeLow: ComponentType<IconProps> = mkIcon(Volume1, '🔉')
+const DefaultVolumeMute: ComponentType<IconProps> = mkIcon(VolumeX, '🔇')
+const DefaultFullscreen: ComponentType<IconProps> = mkIcon(Maximize, '⛶')
+const DefaultExitFullscreen: ComponentType<IconProps> = mkIcon(Minimize, '⊠')
+const DefaultZoomIn: ComponentType<IconProps> = mkIcon(ZoomIn, '➕')
+const DefaultZoomOut: ComponentType<IconProps> = mkIcon(ZoomOut, '➖')
+const DefaultCamera: ComponentType<IconProps> = mkIcon(Camera, '📸')
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -123,12 +133,12 @@ function calcIconSizes(width: number, height: number): IconSizes {
   const clamp = (v: number, min: number, max: number) => Math.round(Math.min(max, Math.max(min, v)))
 
   // More aggressive scaling for small containers
-  const minScale = shortEdge < 180 ? 0.45 : 1
+  const minScale = shortEdge < 180 ? 0.5 : 1
 
   return {
     play: clamp(34 * scale, 14 * minScale, 52),
     seek: clamp(28 * scale, 12 * minScale, 42),
-    bottom: clamp(22 * scale, 12 * minScale, 32),
+    bottom: clamp(22 * scale, 24 * minScale, 32),
     playBtn: clamp(64 * scale, 32 * minScale, 96),
     seekLabel: clamp(10 * scale, 7, 14),
     timeText: clamp(12 * scale, 8 * minScale, 16),
@@ -182,6 +192,7 @@ const SeekBar: FC<SeekBarProps> = ({ currentTime, duration, disabled, onSeek }) 
         maximumValue={duration}
         onSlidingComplete={onSeek}
         disabled={disabled}
+        thumbSize={12}
         minimumTrackTintColor="#fff"
         maximumTrackTintColor="rgba(255,255,255,0.25)"
         thumbTintColor="#fff"
@@ -226,7 +237,10 @@ const VolumeControl: FC<VolumeControlProps> = ({
         <View
           style={[
             styles.volumePopup,
-            { bottom: iconSize * 1.5 + 10, left: -45 + (iconSize - 22) * 1.5 },
+            {
+              bottom: iconSize * 1.5 + 25,
+              left: (iconSize - 100) / 2, // Precisely centered above the icon
+            },
           ]}>
           <Slider
             style={styles.verticalSlider}
@@ -234,6 +248,7 @@ const VolumeControl: FC<VolumeControlProps> = ({
             minimumValue={0}
             maximumValue={1}
             onValueChange={onChange}
+            thumbSize={iconSize}
             minimumTrackTintColor="#fff"
             maximumTrackTintColor="rgba(255,255,255,0.3)"
             thumbTintColor="#fff"
@@ -262,16 +277,20 @@ export const VideoControls: FC<VideoControlsProps> = ({
   icons: customIcons,
   onPlay,
   onPause,
+  onStop,
   onSeekBy,
   onVolumeChange,
   onToggleMute,
   onToggleFullscreen,
-  zoomEnabled,
-  onZoomIn,
-  onZoomOut,
   showCameraButton = false,
   onCapture,
 }) => {
+  const insets = useSafeAreaInsets()
+  const safeTop = isFullscreen ? insets.top : 0
+  const safeBottom = isFullscreen ? insets.bottom : 0
+  const safeLeft = isFullscreen ? insets.left : 0
+  const safeRight = isFullscreen ? insets.right : 0
+
   const icons: Required<ControlIcons> = {
     play: customIcons?.play ?? DefaultPlay,
     pause: customIcons?.pause ?? DefaultPause,
@@ -323,6 +342,7 @@ export const VideoControls: FC<VideoControlsProps> = ({
   }, [state.playbackState, scheduleHide])
 
   const isLive = isLiveProtocol(streamProtocol)
+  const isRtsp = streamProtocol === 'rtsp'
   const seekDisabled = isLive || state.duration <= 0
   const isActive = isActiveState(state.playbackState)
   const isPaused = state.paused
@@ -338,8 +358,11 @@ export const VideoControls: FC<VideoControlsProps> = ({
   )
 
   const handlePlayPause = useCallback(() => {
-    if (isPaused) onPlay()
-    else onPause()
+    if (isPaused) {
+      onPlay()
+    } else {
+      onPause()
+    }
     showAndScheduleHide()
   }, [isPaused, onPlay, onPause, showAndScheduleHide])
 
@@ -349,14 +372,12 @@ export const VideoControls: FC<VideoControlsProps> = ({
   // Dynamic hiding logic
   const showSeek = containerSize.height > 180 && !isLive && isActive
   const showTime = containerSize.width > 260
-  const showBottomControls = containerSize.height > 130
-  // Zoom only if enough space
-  const showZoom = zoomEnabled && containerSize.height > 220 && containerSize.width > 220
+  const showBottomControls = containerSize.height > 100
   // Show volume and fullscreen only if enough width
   const showVolume = containerSize.width > 200 && showBottomControls
-  const showFullscreen = containerSize.width > 160 && showBottomControls
+  const showFullscreen = containerSize.width > 100 && showBottomControls
   const showCenterSeeks = containerSize.width > 180
-  const showCamera = showCameraButton && containerSize.width > 120 && showBottomControls
+  const showCamera = showCameraButton  && containerSize.width > 120 && showBottomControls
 
   return (
     <Pressable
@@ -365,10 +386,18 @@ export const VideoControls: FC<VideoControlsProps> = ({
       accessibilityLabel="Toggle controls">
       <FadeView visible={visible}>
         <View style={styles.overlay} onLayout={onOverlayLayout}>
-          <View style={[styles.topBar, { paddingHorizontal: iconSizes.padding * 1.5 }]}>
+          <View
+            style={[
+              styles.topBar,
+              {
+                paddingTop: safeTop + 10,
+                paddingLeft: safeLeft + iconSizes.padding * 1.5,
+                paddingRight: safeRight + iconSizes.padding * 1.5,
+              },
+            ]}>
             {isLive && (
               <View style={styles.liveBadge}>
-                <Text style={[styles.liveBadgeText, { fontSize: iconSizes.timeText - 1 }]}>
+                <Text style={[styles.liveBadgeText, { fontSize: iconSizes.timeText * 1.5}]}>
                   ● LIVE
                 </Text>
               </View>
@@ -388,24 +417,26 @@ export const VideoControls: FC<VideoControlsProps> = ({
                 onPress={() => handleSeekBy(-seekInterval)}
                 disabled={seekDisabled}
                 accessibilityLabel={`Seek back ${seekInterval} seconds`}>
-                <icons.seekBack size={iconSizes.seek} color={seekDisabled ? '#555' : '#fff'} />
+                <icons.seekBack size={iconSizes.seek } color={seekDisabled ? '#555' : '#fff'} />
               </Pressable>
             )}
 
-            <Pressable
-              style={[
-                styles.iconBtn,
-                styles.playBtn,
-                {
-                  width: iconSizes.playBtn,
-                  height: iconSizes.playBtn,
-                  borderRadius: iconSizes.playBtn / 2,
-                },
-              ]}
-              onPress={handlePlayPause}
-              accessibilityLabel={isPaused ? 'Play' : 'Pause'}>
-              <PlayPauseIcon size={iconSizes.play} color="#fff" />
-            </Pressable>
+            {!isRtsp && (
+              <Pressable
+                style={[
+                  styles.iconBtn,
+                  styles.playBtn,
+                  {
+                    width: iconSizes.playBtn,
+                    height: iconSizes.playBtn,
+                    borderRadius: iconSizes.playBtn / 2,
+                  },
+                ]}
+                onPress={handlePlayPause}
+                accessibilityLabel={isPaused ? 'Play' : 'Pause'}>
+                <PlayPauseIcon size={iconSizes.play} color="#fff" />
+              </Pressable>
+            )}
 
             {showCenterSeeks && (
               <Pressable
@@ -418,19 +449,15 @@ export const VideoControls: FC<VideoControlsProps> = ({
             )}
           </View>
 
-          {showZoom && (
-            <View style={[styles.zoomPill, { right: iconSizes.padding * 2, top: '35%' }]}>
-              <Pressable style={styles.zoomBtn} onPress={onZoomIn} accessibilityLabel="Zoom in">
-                <icons.zoomIn size={iconSizes.bottom} color="#fff" />
-              </Pressable>
-              <View style={styles.zoomDivider} />
-              <Pressable style={styles.zoomBtn} onPress={onZoomOut} accessibilityLabel="Zoom out">
-                <icons.zoomOut size={iconSizes.bottom} color="#fff" />
-              </Pressable>
-            </View>
-          )}
-
-          <View style={[styles.bottomBar, { paddingHorizontal: iconSizes.padding }]}>
+          <View
+            style={[
+              styles.bottomBar,
+              {
+                paddingLeft: safeLeft + iconSizes.padding,
+                paddingRight: safeRight + iconSizes.padding,
+                paddingBottom: safeBottom + 10,
+              },
+            ]}>
             {showSeek && (
               <SeekBar
                 currentTime={state.currentTime}
@@ -442,12 +469,14 @@ export const VideoControls: FC<VideoControlsProps> = ({
 
             {showBottomControls && (
               <View style={styles.bottomControlsRow}>
-                <Pressable
-                  style={styles.iconBtn}
-                  onPress={handlePlayPause}
-                  accessibilityLabel="Play/Pause">
-                  <PlayPauseIcon size={iconSizes.bottom + 4} color="#fff" />
-                </Pressable>
+                {!isRtsp && (
+                  <Pressable
+                    style={styles.iconBtn}
+                    onPress={handlePlayPause}
+                    accessibilityLabel="Play/Pause">
+                    <PlayPauseIcon size={iconSizes.bottom} color="#fff" />
+                  </Pressable>
+                )}
 
                 {!isLive && showTime && (
                   <Text style={[styles.timeText, { fontSize: iconSizes.timeText }]}>
@@ -511,7 +540,8 @@ const styles = StyleSheet.create({
   iconBtn: {
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
   },
   liveBadge: {
     backgroundColor: '#e53935',
@@ -528,6 +558,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.45)',
     flex: 1,
     justifyContent: 'space-between',
+    paddingHorizontal: 8,
   },
   playBtn: {
     backgroundColor: 'rgba(255,255,255,0.18)',
@@ -572,23 +603,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     position: 'relative',
   },
-  zoomBtn: {
-    padding: 10,
-  },
-  zoomDivider: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    height: 1,
-    marginVertical: 2,
-    width: 16,
-  },
-  zoomPill: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    borderColor: 'rgba(255,255,255,0.15)',
-    borderRadius: 24,
-    borderWidth: 1,
-    paddingHorizontal: 2,
-    paddingVertical: 4,
-    position: 'absolute',
-  },
+
 })

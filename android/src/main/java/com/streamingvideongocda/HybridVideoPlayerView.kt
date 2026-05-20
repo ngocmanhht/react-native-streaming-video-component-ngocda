@@ -1,24 +1,50 @@
 package com.streamingvideongocda
 
+import android.util.Log
 import android.widget.FrameLayout
-import com.facebook.react.bridge.ReactApplicationContext
+import com.facebook.react.bridge.ReactContext
 import com.margelo.nitro.core.Promise
-import com.videolan.libvlc.util.VLCVideoLayout
-import com.streamingvideongocda.generated.HybridVideoPlayerViewSpec
-import com.streamingvideongocda.generated.StreamProtocol
-import com.streamingvideongocda.generated.ResizeMode
-import com.streamingvideongocda.generated.PlaybackState
-import com.streamingvideongocda.generated.ReadyEvent
-import com.streamingvideongocda.generated.NaturalSize
-import com.streamingvideongocda.generated.ProgressEvent
-import com.streamingvideongocda.generated.ErrorEvent
+import org.videolan.libvlc.util.VLCVideoLayout
+import com.margelo.nitro.com.streamingvideongocda.HybridVideoPlayerViewSpec
+import com.margelo.nitro.com.streamingvideongocda.StreamProtocol
+import com.margelo.nitro.com.streamingvideongocda.ResizeMode
+import com.margelo.nitro.com.streamingvideongocda.PlaybackState
+import com.margelo.nitro.com.streamingvideongocda.ReadyEvent
+import com.margelo.nitro.com.streamingvideongocda.NaturalSize
+import com.margelo.nitro.com.streamingvideongocda.ProgressEvent
+import com.margelo.nitro.com.streamingvideongocda.ErrorEvent
 
-class HybridVideoPlayerView(private val ctx: ReactApplicationContext)
+private class LayoutForcingFrameLayout(context: android.content.Context) : FrameLayout(context) {
+    override fun requestLayout() {
+        super.requestLayout()
+        // Fabric doesn't automatically layout dynamically added native children.
+        // We force a measure/layout loop on the next UI frame to guarantee non-zero dimensions.
+        post(measureAndLayoutRunnable)
+    }
+
+    private val measureAndLayoutRunnable = Runnable {
+        measure(
+            android.view.View.MeasureSpec.makeMeasureSpec(width, android.view.View.MeasureSpec.EXACTLY),
+            android.view.View.MeasureSpec.makeMeasureSpec(height, android.view.View.MeasureSpec.EXACTLY)
+        )
+        layout(left, top, right, bottom)
+    }
+}
+
+class HybridVideoPlayerView(private val ctx: ReactContext)
     : HybridVideoPlayerViewSpec() {
 
     // ── Native view ──────────────────────────────────────────────────────────
-    private val rootLayout = FrameLayout(ctx)
+    private val rootLayout = LayoutForcingFrameLayout(ctx)
     override val view: android.view.View get() = rootLayout
+
+    // ── Abstract Properties Overrides ────────────────────────────────────────
+    override var onReady: ((event: ReadyEvent) -> Unit)? = null
+    override var onProgress: ((event: ProgressEvent) -> Unit)? = null
+    override var onBuffering: ((isBuffering: Boolean) -> Unit)? = null
+    override var onStateChange: ((state: PlaybackState) -> Unit)? = null
+    override var onError: ((event: ErrorEvent) -> Unit)? = null
+    override var onEnd: (() -> Unit)? = null
 
     // ── Bridges ──────────────────────────────────────────────────────────────
     private val exo = ExoPlayerBridge(ctx)
@@ -40,6 +66,7 @@ class HybridVideoPlayerView(private val ctx: ReactApplicationContext)
 
     override var url: String = ""
         set(value) {
+            Log.d("StreamingVideo", "setUrl: $value")
             if (value == field || value.isEmpty()) return
             field = value
             reloadPlayer()
@@ -47,6 +74,7 @@ class HybridVideoPlayerView(private val ctx: ReactApplicationContext)
 
     override var streamProtocol: StreamProtocol = StreamProtocol.HLS
         set(value) {
+            Log.d("StreamingVideo", "setStreamProtocol: $value")
             if (value == field) return
             field = value
             reloadPlayer()
@@ -99,18 +127,36 @@ class HybridVideoPlayerView(private val ctx: ReactApplicationContext)
 
     private fun reloadPlayer() {
         if (url.isEmpty()) return
-        activeProtocol = streamProtocol
+        
+        var detectedProtocol = streamProtocol
+        val lowerUrl = url.lowercase()
+        if (lowerUrl.startsWith("rtsp://")) {
+            detectedProtocol = StreamProtocol.RTSP
+        } else if (lowerUrl.contains(".m3u8")) {
+            detectedProtocol = StreamProtocol.HLS
+        } else if (lowerUrl.contains(".mp4")) {
+            detectedProtocol = StreamProtocol.MP4
+        }
+        
+        Log.d("StreamingVideo", "reloadPlayer: url=$url, requested=$streamProtocol, detected=$detectedProtocol")
+        activeProtocol = detectedProtocol
         useVlcFallback = false
         onStateChange?.invoke(PlaybackState.LOADING)
 
         when (activeProtocol) {
             StreamProtocol.HLS, StreamProtocol.MP4 -> loadExo()
-            // For RTSP: try ExoPlayer first; VLC fallback fires from onError
-            StreamProtocol.RTSP -> loadExo()
+            // For RTSP: skip ExoPlayer entirely on Android because Media3 RTSP digest auth is broken.
+            // Go straight to VLC to play in under 500ms instead of waiting for 8.5 seconds timeout!
+            StreamProtocol.RTSP -> {
+                Log.d("StreamingVideo", "reloadPlayer: RTSP detected, skipping ExoPlayer and loading VLC directly")
+                useVlcFallback = true
+                loadVlc()
+            }
         }
     }
 
     private fun loadExo() {
+        Log.d("StreamingVideo", "loadExo: url=$url")
         // Stop VLC and clear its view before switching
         vlc.stop()
         rootLayout.removeAllViews()
@@ -121,12 +167,16 @@ class HybridVideoPlayerView(private val ctx: ReactApplicationContext)
                 FrameLayout.LayoutParams.MATCH_PARENT
             )
         )
+        rootLayout.requestLayout()
         exo.load(url)
-        // NOTE: play() is called inside bindExo.onReady (after async ready)
-        // to avoid the "call play before player is ready" race condition
+        if (!paused) {
+            Log.d("StreamingVideo", "loadExo -> calling exo.play() immediately")
+            exo.play()
+        }
     }
 
     private fun loadVlc() {
+        Log.d("StreamingVideo", "loadVlc: url=$url")
         // Stop ExoPlayer and clear its view before switching
         exo.stop()
         rootLayout.removeAllViews()
@@ -138,9 +188,15 @@ class HybridVideoPlayerView(private val ctx: ReactApplicationContext)
                 FrameLayout.LayoutParams.MATCH_PARENT
             )
         )
+        rootLayout.requestLayout()
         vlc.attachSurface(vlcLayout)
         vlc.load(url)
-        // NOTE: play() is called inside bindVlc.onReady
+        if (!paused) {
+            Log.d("StreamingVideo", "loadVlc -> scheduling vlc.play() with 100ms delay on Main Looper")
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                vlc.play()
+            }, 100)
+        }
     }
 
     private fun activePlay() {
@@ -174,39 +230,46 @@ class HybridVideoPlayerView(private val ctx: ReactApplicationContext)
         onStateChange?.invoke(PlaybackState.IDLE)
     }
 
-    override fun seekTo(positionSeconds: Double): Promise<Unit> = Promise.async {
+    override fun seekTo(positionSeconds: Double): Promise<Unit> {
+        val promise = Promise<Unit>()
         val ms = (positionSeconds * 1000).toLong()
         if (useVlcFallback) {
             vlc.seekTo(ms) { success ->
-                if (!success) throw Exception("VLC seek failed: stream not seekable")
+                if (success) promise.resolve(Unit)
+                else promise.reject(Exception("VLC seek failed: stream not seekable"))
             }
         } else {
-            exo.seekTo(ms) { /* ExoPlayer seek is always synchronous internally */ }
+            exo.seekTo(ms) { 
+                promise.resolve(Unit)
+            }
         }
+        return promise
     }
 
-    override fun getCurrentTime(): Promise<Double> = Promise.async {
+    override fun getCurrentTime(): Promise<Double> {
         val ms = if (useVlcFallback) vlc.currentPositionMs else exo.currentPositionMs
-        ms / 1000.0
+        return Promise.resolved(ms / 1000.0)
     }
 
-    override fun getDuration(): Promise<Double> = Promise.async {
+    override fun getDuration(): Promise<Double> {
         val ms = if (useVlcFallback) vlc.durationMs else exo.durationMs
-        if (ms < 0) -1.0 else ms / 1000.0
+        return Promise.resolved(if (ms < 0) -1.0 else ms / 1000.0)
     }
 
-    override fun takeScreenshot(): Promise<String> = Promise.async {
+    override fun takeScreenshot(): Promise<String> {
+        val promise = Promise<String>()
         if (useVlcFallback) {
-            vlc.takeScreenshot { path ->
-                if (path != null) it.resolve(path)
-                else it.reject(Exception("VLC capture failed"))
+            vlc.takeScreenshot(rootLayout) { path ->
+                if (path != null) promise.resolve(path)
+                else promise.reject(Exception("VLC capture failed"))
             }
         } else {
             exo.takeScreenshot { path ->
-                if (path != null) it.resolve(path)
-                else it.reject(Exception("ExoPlayer capture failed"))
+                if (path != null) promise.resolve(path)
+                else promise.reject(Exception("ExoPlayer capture failed"))
             }
         }
+        return promise
     }
 
     // AirPlay is iOS only
@@ -216,6 +279,7 @@ class HybridVideoPlayerView(private val ctx: ReactApplicationContext)
 
     private fun bindExo() {
         exo.onReady = { dur ->
+            Log.d("StreamingVideo", "ExoPlayer onReady: durationMs=$dur")
             onReady?.invoke(ReadyEvent(dur / 1000.0, NaturalSize(0.0, 0.0)))
             onStateChange?.invoke(PlaybackState.READY)
             // Async-safe auto-play: only play after ExoPlayer signals it is ready
@@ -225,10 +289,12 @@ class HybridVideoPlayerView(private val ctx: ReactApplicationContext)
             onProgress?.invoke(ProgressEvent(cur / 1000.0, if (dur < 0) -1.0 else dur / 1000.0, 0.0))
         }
         exo.onBuffering = { b ->
+            Log.d("StreamingVideo", "ExoPlayer onBuffering: $b")
             onBuffering?.invoke(b)
             onStateChange?.invoke(if (b) PlaybackState.BUFFERING else PlaybackState.PLAYING)
         }
         exo.onEnd = {
+            Log.d("StreamingVideo", "ExoPlayer onEnd")
             if (shouldRepeat) {
                 exo.seekTo(0) {}
                 exo.play()
@@ -238,8 +304,10 @@ class HybridVideoPlayerView(private val ctx: ReactApplicationContext)
             }
         }
         exo.onError = { code, msg ->
+            Log.e("StreamingVideo", "ExoPlayer onError: code=$code, msg=$msg")
             // RTSP error on ExoPlayer → fall back to LibVLC (ExoPlayer doesn't support all RTSP codecs)
             if (activeProtocol == StreamProtocol.RTSP && !useVlcFallback) {
+                Log.d("StreamingVideo", "ExoPlayer RTSP failed -> falling back to VLC")
                 useVlcFallback = true
                 loadVlc()
             } else {
@@ -251,6 +319,7 @@ class HybridVideoPlayerView(private val ctx: ReactApplicationContext)
 
     private fun bindVlc() {
         vlc.onReady = { dur ->
+            Log.d("StreamingVideo", "VlcPlayer onReady: durationMs=$dur")
             onReady?.invoke(ReadyEvent(if (dur < 0) -1.0 else dur / 1000.0, NaturalSize(0.0, 0.0)))
             onStateChange?.invoke(PlaybackState.READY)
             // Async-safe auto-play
@@ -260,10 +329,12 @@ class HybridVideoPlayerView(private val ctx: ReactApplicationContext)
             onProgress?.invoke(ProgressEvent(cur / 1000.0, if (dur < 0) -1.0 else dur / 1000.0, 0.0))
         }
         vlc.onBuffering = { b ->
+            Log.d("StreamingVideo", "VlcPlayer onBuffering: $b")
             onBuffering?.invoke(b)
             onStateChange?.invoke(if (b) PlaybackState.BUFFERING else PlaybackState.PLAYING)
         }
         vlc.onEnd = {
+            Log.d("StreamingVideo", "VlcPlayer onEnd")
             if (activeProtocol == StreamProtocol.RTSP && paused) {
                 vlcNeedsReconnect = true
             }
@@ -276,6 +347,7 @@ class HybridVideoPlayerView(private val ctx: ReactApplicationContext)
             }
         }
         vlc.onError = { _, msg ->
+            Log.e("StreamingVideo", "VlcPlayer onError: msg=$msg")
             onError?.invoke(ErrorEvent(-1.0, msg, null))
             onStateChange?.invoke(PlaybackState.ERROR)
         }
@@ -283,8 +355,8 @@ class HybridVideoPlayerView(private val ctx: ReactApplicationContext)
 
     // ── Lifecycle ────────────────────────────────────────────────────────────
 
-    override fun onDestroy() {
-        super.onDestroy()
+    override fun onDropView() {
+        super.onDropView()
         // Release in correct order to prevent JNI crash:
         // 1. Stop playback first
         // 2. Release ExoPlayer (releases codec + surface)

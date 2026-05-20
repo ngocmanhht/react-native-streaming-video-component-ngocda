@@ -1,8 +1,8 @@
-import React, { useCallback, useEffect, useState, type FC, type RefObject } from 'react'
-import { Modal, StatusBar, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
-import { getHostComponent } from 'react-native-nitro-modules'
-import Reanimated, { useSharedValue, withTiming, useAnimatedStyle } from 'react-native-reanimated'
-import { Gesture, GestureDetector } from 'react-native-gesture-handler'
+import React, { useCallback, useEffect, useState, useRef, type FC, type RefObject } from 'react'
+import { Modal, StatusBar, StyleSheet, View, Text, type StyleProp, type ViewStyle } from 'react-native'
+import { getHostComponent, callback } from 'react-native-nitro-modules'
+import Reanimated, { useSharedValue, withTiming, useAnimatedStyle, runOnJS } from 'react-native-reanimated'
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler'
 import Orientation from 'react-native-orientation-locker'
 import type { VideoPlayerProps, VideoPlayerView, StreamProtocol } from './VideoPlayer.nitro'
 import VideoPlayerViewConfig from '../nitrogen/generated/shared/json/VideoPlayerViewConfig.json'
@@ -34,6 +34,9 @@ export interface VideoPlayerPublicProps extends Omit<
 
   /** Initial volume, 0.0 – 1.0. Default: 1.0 */
   volume?: number
+
+  /** Initial muted state. Default: true */
+  muted?: boolean
 
   /** Show the built-in controls overlay. Default: false */
   showControls?: boolean
@@ -69,6 +72,7 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
   style,
   paused: externalPaused,
   volume: initialVolume = 1,
+  muted: initialMuted = true,
   showControls = false,
   zoomEnabled = false,
   seekInterval = 15,
@@ -96,7 +100,11 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
     onEnd,
     onReady,
     takeScreenshot,
-  } = useVideoPlayer({ initialPaused: externalPaused ?? false })
+  } = useVideoPlayer({
+    initialPaused: externalPaused ?? false,
+    initialVolume,
+    initialMuted,
+  })
 
   // Sync external paused prop
   useEffect(() => {
@@ -105,15 +113,21 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
     else play()
   }, [externalPaused, pause, play])
 
-  // Sync initial volume
+  // Sync volume if it changes externally
+  const isMounted = React.useRef(false)
   useEffect(() => {
+    if (!isMounted.current) {
+      isMounted.current = true
+      return
+    }
     setVolume(initialVolume)
   }, [initialVolume, setVolume])
 
   // ── Ref Management ───────────────────────────────────────────────────────
   // We use a callback ref to ensure internalRef is always set (for useVideoPlayer logic)
   // while also forwarding the ref to externalRef if provided.
-  const handleRef = useCallback(
+  // We use hybridRef to get the Nitro HybridObject which contains the actual methods
+  const handleHybridRef = useCallback(
     (node: VideoPlayerView | null) => {
       ;(internalRef as any).current = node
       if (externalRef) {
@@ -128,56 +142,60 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
   )
 
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [currentZoom, setCurrentZoom] = useState(1)
+  const [showZoomBadge, setShowZoomBadge] = useState(false)
+  const zoomTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // ── Orientation Management ────────────────────────────────────────────────
-  useEffect(() => {
+useEffect(() => {
+  const changeOrientation = async () => {
     try {
       if (isFullscreen) {
-        Orientation.lockToLandscape()
+        // Important for iOS
+        Orientation.unlockAllOrientations()
+
+        setTimeout(() => {
+          Orientation.lockToLandscape()
+        }, 100)
       } else {
-        Orientation.lockToPortrait()
+        Orientation.unlockAllOrientations()
+
+        setTimeout(() => {
+          Orientation.lockToPortrait()
+        }, 100)
       }
     } catch (e) {
       console.warn('Orientation error:', e)
     }
+  }
 
-    return () => {
-      try {
-        Orientation.lockToPortrait()
-      } catch (e) {
-        // Ignore cleanup errors
-      }
-    }
-  }, [isFullscreen])
+  changeOrientation()
+
+  return () => {
+    try {
+      Orientation.unlockAllOrientations()
+      Orientation.lockToPortrait()
+    } catch (e) {}
+  }
+}, [isFullscreen])
 
   const toggleFullscreen = useCallback(() => {
     setIsFullscreen(fs => !fs)
   }, [])
 
-  // ── Zoom Logic ────────────────────────────────────────────────────────────
+  // ── Shared native player element ──────────────────────────────────────────
   const zoomScale = useSharedValue(1)
   const savedZoomScale = useSharedValue(1)
 
-  const handleZoom = (delta: number) => {
-    const next = Math.max(1, Math.min(5, zoomScale.value + delta))
-    zoomScale.value = withTiming(next)
-    savedZoomScale.value = next
-  }
-
-  // ── Shared native player element ──────────────────────────────────────────
-  const renderNativePlayer = () => (
-    <ZoomableView
-      zoomEnabled={zoomEnabled}
-      style={StyleSheet.absoluteFill}
-      scale={zoomScale}
-      savedScale={savedZoomScale}>
+  const renderContent = () => {
+    const playerEl = (
       <NativeVideoPlayer
-        ref={handleRef}
+        hybridRef={callback(handleHybridRef)}
         streamProtocol={streamProtocol}
         paused={state.paused}
         volume={state.isMuted ? 0 : state.volume}
         muted={state.isMuted}
-        zoomEnabled={zoomEnabled}
+        zoomEnabled={zoomEnabled && isFullscreen}
         onStateChange={onStateChange}
         onProgress={onProgress}
         onBuffering={onBuffering}
@@ -187,8 +205,31 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
         {...(nativeProps as any)}
         style={StyleSheet.absoluteFill}
       />
-    </ZoomableView>
-  )
+    )
+
+    const controlsEl = renderControls(streamProtocol)
+
+    return (
+      <View style={StyleSheet.absoluteFill}>
+        <ZoomableView
+          zoomEnabled={zoomEnabled && isFullscreen}
+          style={StyleSheet.absoluteFill}
+          scale={zoomScale}
+          savedScale={savedZoomScale}
+          player={playerEl}
+          controls={controlsEl}
+          onZoomChange={(zoom) => {
+            setCurrentZoom(zoom)
+            setShowZoomBadge(true)
+            if (zoomTimeoutRef.current) clearTimeout(zoomTimeoutRef.current)
+            zoomTimeoutRef.current = setTimeout(() => {
+              setShowZoomBadge(false)
+            }, 2000)
+          }}
+        />
+      </View>
+    )
+  }
 
   const renderControls = (protocol: StreamProtocol) =>
     showControls ? (
@@ -198,9 +239,6 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
         isFullscreen={isFullscreen}
         seekInterval={seekInterval}
         icons={icons}
-        zoomEnabled={zoomEnabled}
-        onZoomIn={() => handleZoom(0.5)}
-        onZoomOut={() => handleZoom(-0.5)}
         onPlay={play}
         onPause={pause}
         onStop={stop}
@@ -223,8 +261,7 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
   if (!isFullscreen) {
     return (
       <View style={[styles.container, style]}>
-        {renderNativePlayer()}
-        {renderControls(streamProtocol)}
+        {renderContent()}
       </View>
     )
   }
@@ -236,13 +273,24 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
         visible={isFullscreen}
         transparent={false}
         animationType="fade"
-        supportedOrientations={['portrait', 'landscape', 'landscape-left', 'landscape-right']}
+        statusBarTranslucent={true}
+        supportedOrientations={[
+  'landscape-left',
+  'landscape-right',
+  'portrait',
+]}
         onRequestClose={toggleFullscreen}>
-        <StatusBar hidden />
-        <View style={styles.fullscreenContainer}>
-          {renderNativePlayer()}
-          {renderControls(streamProtocol)}
-        </View>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <StatusBar hidden />
+          <View style={styles.fullscreenContainer}>
+            {renderContent()}
+            {showZoomBadge && currentZoom > 1.05 && (
+              <View style={styles.zoomBadge}>
+                <Text style={styles.zoomBadgeText}>{currentZoom.toFixed(1)}x</Text>
+              </View>
+            )}
+          </View>
+        </GestureHandlerRootView>
       </Modal>
     </>
   )
@@ -251,18 +299,23 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
 const ZoomableView: FC<{
   zoomEnabled: boolean
   style?: StyleProp<ViewStyle>
-  children: React.ReactNode
+  player: React.ReactNode
+  controls?: React.ReactNode
   scale: any
   savedScale: any
-}> = ({ zoomEnabled, style, children, scale, savedScale }) => {
+  onZoomChange?: (zoom: number) => void
+}> = ({ zoomEnabled, style, player, controls, scale, savedScale, onZoomChange }) => {
   if (!zoomEnabled) {
-    return <View style={style}>{children}</View>
+    return (
+      <View style={style}>
+        {player}
+        {controls}
+      </View>
+    )
   }
 
   return (
-    <ZoomableInner style={style} scale={scale} savedScale={savedScale}>
-      {children}
-    </ZoomableInner>
+    <ZoomableInner style={style} player={player} controls={controls} scale={scale} savedScale={savedScale} onZoomChange={onZoomChange} />
   )
 }
 ZoomableView.displayName = 'ZoomableView'
@@ -273,28 +326,70 @@ interface SharedValue {
 
 const ZoomableInner: FC<{
   style?: StyleProp<ViewStyle>
-  children: React.ReactNode
+  player: React.ReactNode
+  controls?: React.ReactNode
   scale: SharedValue
   savedScale: SharedValue
-}> = ({ style, children, scale, savedScale }) => {
+  onZoomChange?: (zoom: number) => void
+}> = ({ style, player, controls, scale, savedScale, onZoomChange }) => {
+  const offsetX = useSharedValue(0)
+  const offsetY = useSharedValue(0)
+  const savedOffsetX = useSharedValue(0)
+  const savedOffsetY = useSharedValue(0)
+
   const pinchGesture = Gesture.Pinch()
-    .onUpdate((e: any) => {
-      scale.value = savedScale.value * e.scale
+    .onUpdate((e) => {
+      scale.value = Math.max(1, Math.min(5, savedScale.value * e.scale))
     })
     .onEnd(() => {
-      if (scale.value < 1) {
+      if (scale.value < 1.05) {
         scale.value = withTiming(1)
+        savedScale.value = 1
+        offsetX.value = withTiming(0)
+        offsetY.value = withTiming(0)
+        savedOffsetX.value = 0
+        savedOffsetY.value = 0
+      } else {
+        savedScale.value = scale.value
       }
-      savedScale.value = scale.value
+      if (onZoomChange) runOnJS(onZoomChange)(scale.value)
     })
 
+  const panGesture = Gesture.Pan()
+    .onUpdate((e) => {
+      if (scale.value > 1) {
+        offsetX.value = savedOffsetX.value + e.translationX
+        offsetY.value = savedOffsetY.value + e.translationY
+      }
+    })
+    .onEnd(() => {
+      if (scale.value <= 1) {
+        offsetX.value = withTiming(0)
+        offsetY.value = withTiming(0)
+        savedOffsetX.value = 0
+        savedOffsetY.value = 0
+      } else {
+        savedOffsetX.value = offsetX.value
+        savedOffsetY.value = offsetY.value
+      }
+    })
+
+  const composed = Gesture.Simultaneous(pinchGesture, panGesture)
+
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
+    transform: [
+      { translateX: offsetX.value },
+      { translateY: offsetY.value },
+      { scale: scale.value }
+    ],
   }))
 
   return (
-    <GestureDetector gesture={pinchGesture}>
-      <Reanimated.View style={[style, animatedStyle]}>{children}</Reanimated.View>
+    <GestureDetector gesture={composed}>
+      <View style={style}>
+        <Reanimated.View style={[StyleSheet.absoluteFill, animatedStyle]}>{player}</Reanimated.View>
+        {controls}
+      </View>
     </GestureDetector>
   )
 }
@@ -306,11 +401,25 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
     justifyContent: 'center',
     overflow: 'hidden',
+
   },
   fullscreenContainer: {
     alignItems: 'center',
     backgroundColor: '#000',
     flex: 1,
     justifyContent: 'center',
+  },
+  zoomBadge: {
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    position: 'absolute',
+    top: 40,
+  },
+  zoomBadgeText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 })

@@ -16,10 +16,14 @@ export interface VideoPlayerState {
 interface UseVideoPlayerOptions {
   /** Initial paused state (can be kept in sync with an external prop) */
   initialPaused?: boolean
+  /** Initial volume (0.0 to 1.0). Default: 1.0 */
+  initialVolume?: number
+  /** Initial muted state. Default: true */
+  initialMuted?: boolean
 }
 
 export function useVideoPlayer(options: UseVideoPlayerOptions = {}) {
-  const { initialPaused = false } = options
+  const { initialPaused = false, initialVolume = 1, initialMuted = true } = options
   const ref = useRef<VideoPlayerView>(null)
 
   const [state, setState] = useState<VideoPlayerState>({
@@ -28,8 +32,8 @@ export function useVideoPlayer(options: UseVideoPlayerOptions = {}) {
     currentTime: 0,
     duration: -1,
     isBuffering: false,
-    volume: 1,
-    isMuted: true,
+    volume: initialVolume,
+    isMuted: initialMuted,
     error: null,
   })
 
