@@ -78,7 +78,8 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
     didSet {
       guard paused != oldValue else { return }
       DispatchQueue.main.async { [weak self] in
-        self?.paused ? self?.activePause() : self?.activePlay()
+        guard let self = self else { return }
+        self.paused ? self.activePause() : self.activePlay()
       }
     }
   }
