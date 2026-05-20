@@ -1,7 +1,7 @@
 # react-native-streaming-video-component-ngocda
 
 <p align="center">
-  <strong>High-performance streaming video component for React Native</strong><br/>
+  <strong>High-performance streaming video component for React Native New Architect</strong><br/>
   Built with <a href="https://nitro.margelo.com">Nitro Modules</a> for zero-overhead native communication
 </p>
 
