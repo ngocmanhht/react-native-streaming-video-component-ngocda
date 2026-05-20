@@ -56,15 +56,46 @@ final class AVPlayerBridge: NSObject {
     }
   }
 
-  func load(url: String) {
+  func load(url: String, isLiveStream: Bool = false) {
     removeObservers()
     guard let u = URL(string: url) else { return }
-    let item = AVPlayerItem(url: u)
+
+    // ── AVURLAsset options ─────────────────────────────────────────────────────
+    let assetOptions: [String: Any] = [
+      // Forward cookies (helps with authenticated HLS / CDN-protected MP4)
+      AVURLAssetHTTPCookiesKey: HTTPCookieStorage.shared.cookies ?? [],
+    ]
+    let asset = AVURLAsset(url: u, options: assetOptions)
+    let item = AVPlayerItem(asset: asset)
+
+    if isLiveStream {
+      // ── HLS live stream: optimise for low latency ───────────────────────────────
+      // Only 1 s of buffer needed before starting — cuts initial load time
+      item.preferredForwardBufferDuration = 1.0
+    } else {
+      // ── MP4 / VOD: optimise for smooth, stall-free playback ────────────────────
+      // Buffer 10 s ahead so seeking & playback are smooth
+      item.preferredForwardBufferDuration = 10.0
+    }
 
     if player == nil {
-      player = AVPlayer(playerItem: item)
+      let p = AVPlayer(playerItem: item)
+
+      if isLiveStream {
+        // HLS live: play immediately without waiting to buffer more
+        // (reduces perceived latency on live cameras / streams)
+        p.automaticallyWaitsToMinimizeStalling = false
+      } else {
+        // MP4 / VOD: keep the default ‘true’ so AVPlayer buffers before playing,
+        // preventing mid-playback stalls on slower connections
+        p.automaticallyWaitsToMinimizeStalling = true
+      }
+
+      player = p
     } else {
       player?.replaceCurrentItem(with: item)
+      // Re-apply stalling preference when reusing the same AVPlayer instance
+      player?.automaticallyWaitsToMinimizeStalling = !isLiveStream
     }
 
     // CRITICAL: create or re-link the layer NOW, after player exists.
@@ -126,22 +157,26 @@ final class AVPlayerBridge: NSObject {
     // Ready-to-play
     let statusObs = item.observe(\.status, options: [.new]) { [weak self] item, _ in
       guard let self = self else { return }
-      switch item.status {
-      case .readyToPlay:
-        let dur = item.duration.seconds
-        let track = item.tracks.first(where: { $0.assetTrack?.mediaType == .video })
-        let size  = track?.assetTrack?.naturalSize ?? .zero
-        self.onReady?((dur.isNaN || dur.isInfinite) ? -1 : dur, size)
-      case .failed:
-        let code = item.error?._code ?? -1
-        self.onError?(code, item.error?.localizedDescription ?? "Unknown AVPlayer error")
-      default: break
+      DispatchQueue.main.async {
+        switch item.status {
+        case .readyToPlay:
+          let dur = item.duration.seconds
+          let track = item.tracks.first(where: { $0.assetTrack?.mediaType == .video })
+          let size  = track?.assetTrack?.naturalSize ?? .zero
+          self.onReady?((dur.isNaN || dur.isInfinite) ? -1 : dur, size)
+        case .failed:
+          let code = item.error?._code ?? -1
+          self.onError?(code, item.error?.localizedDescription ?? "Unknown AVPlayer error")
+        default: break
+        }
       }
     }
 
     // Buffering state
     let bufObs = item.observe(\.isPlaybackLikelyToKeepUp, options: [.new]) { [weak self] item, _ in
-      self?.onBuffering?(!item.isPlaybackLikelyToKeepUp)
+      DispatchQueue.main.async {
+        self?.onBuffering?(!item.isPlaybackLikelyToKeepUp)
+      }
     }
 
     itemObservations = [statusObs, bufObs]
@@ -182,11 +217,14 @@ final class AVPlayerBridge: NSObject {
   }
 
   @objc private func playerItemDidEnd() {
-    if _isRepeating {
-      player?.seek(to: .zero)
-      player?.play()
-    } else {
-      onEnd?()
+    DispatchQueue.main.async { [weak self] in
+      guard let self = self else { return }
+      if self._isRepeating {
+        self.player?.seek(to: .zero)
+        self.player?.play()
+      } else {
+        self.onEnd?()
+      }
     }
   }
 
@@ -201,14 +239,18 @@ final class AVPlayerBridge: NSObject {
     imageGenerator.appliesPreferredTrackTransform = true
     let time = player?.currentTime() ?? .zero
 
-    imageGenerator.generateCGImagesAsynchronously(forTimes: [NSValue(time: time)]) { _, image, _, _, _ in
-      guard let image = image else {
+    imageGenerator.generateCGImagesAsynchronously(forTimes: [NSValue(time: time)]) { [weak self] _, image, _, _, _ in
+      guard let self = self else {
         completion(nil)
+        return
+      }
+      guard let image = image else {
+        DispatchQueue.main.async { completion(nil) }
         return
       }
       let uiImage = UIImage(cgImage: image)
       let path = self.saveImage(uiImage)
-      completion(path)
+      DispatchQueue.main.async { completion(path) }
     }
   }
 
