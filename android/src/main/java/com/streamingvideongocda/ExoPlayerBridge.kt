@@ -4,8 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
-import android.view.PixelCopy
-import android.view.SurfaceView
+import android.view.TextureView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -16,7 +15,7 @@ import java.io.FileOutputStream
 class ExoPlayerBridge(private val context: Context) {
 
     private var player: ExoPlayer? = null
-    private val surfaceView = SurfaceView(context)
+    private val textureView = TextureView(context)
 
     var onReady: ((duration: Long) -> Unit)? = null
     var onProgress: ((currentMs: Long, durationMs: Long) -> Unit)? = null
@@ -27,13 +26,13 @@ class ExoPlayerBridge(private val context: Context) {
     // Whether to loop playback
     var shouldRepeat: Boolean = false
 
-    val view: SurfaceView get() = surfaceView
+    val view: TextureView get() = textureView
 
     private val progressRunnable = object : Runnable {
         override fun run() {
             player?.let {
                 onProgress?.invoke(it.currentPosition, it.duration)
-                surfaceView.postDelayed(this, progressIntervalMs)
+                textureView.postDelayed(this, progressIntervalMs)
             }
         }
     }
@@ -44,7 +43,7 @@ class ExoPlayerBridge(private val context: Context) {
         // Full release before reload to prevent native decoder leak
         release()
         player = ExoPlayer.Builder(context).build().also { exo ->
-            exo.setVideoSurfaceView(surfaceView)
+            exo.setVideoTextureView(textureView)
             exo.repeatMode = if (shouldRepeat) Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_OFF
             exo.addListener(object : Player.Listener {
                 override fun onPlaybackStateChanged(state: Int) {
@@ -53,19 +52,19 @@ class ExoPlayerBridge(private val context: Context) {
                             onBuffering?.invoke(false)
                             onReady?.invoke(exo.duration)
                             // Start progress reporting only after ready
-                            surfaceView.removeCallbacks(progressRunnable)
-                            surfaceView.post(progressRunnable)
+                            textureView.removeCallbacks(progressRunnable)
+                            textureView.post(progressRunnable)
                         }
                         Player.STATE_BUFFERING -> onBuffering?.invoke(true)
                         Player.STATE_ENDED     -> {
-                            surfaceView.removeCallbacks(progressRunnable)
+                            textureView.removeCallbacks(progressRunnable)
                             onEnd?.invoke()
                         }
                         else -> {}
                     }
                 }
                 override fun onPlayerError(error: PlaybackException) {
-                    surfaceView.removeCallbacks(progressRunnable)
+                    textureView.removeCallbacks(progressRunnable)
                     onError?.invoke(error.errorCode, error.localizedMessage ?: "ExoPlayer error")
                 }
             })
@@ -79,7 +78,7 @@ class ExoPlayerBridge(private val context: Context) {
     fun play()  { player?.play() }
     fun pause() { player?.pause() }
     fun stop()  {
-        surfaceView.removeCallbacks(progressRunnable)
+        textureView.removeCallbacks(progressRunnable)
         player?.stop()
     }
 
@@ -102,21 +101,15 @@ class ExoPlayerBridge(private val context: Context) {
     // ── Screenshot ───────────────────────────────────────────────────────────
 
     fun takeScreenshot(callback: (String?) -> Unit) {
-        if (surfaceView.width <= 0 || surfaceView.height <= 0) {
+        if (textureView.width <= 0 || textureView.height <= 0) {
             callback(null)
             return
         }
-        val bitmap = Bitmap.createBitmap(surfaceView.width, surfaceView.height, Bitmap.Config.ARGB_8888)
-        try {
-            PixelCopy.request(surfaceView, bitmap, { result ->
-                if (result == PixelCopy.SUCCESS) {
-                    val path = saveBitmap(bitmap)
-                    callback(path)
-                } else {
-                    callback(null)
-                }
-            }, Handler(Looper.getMainLooper()))
-        } catch (e: Exception) {
+        val bitmap = textureView.bitmap
+        if (bitmap != null) {
+            val path = saveBitmap(bitmap)
+            callback(path)
+        } else {
             callback(null)
         }
     }
@@ -136,7 +129,7 @@ class ExoPlayerBridge(private val context: Context) {
 
     fun release() {
         // Remove callbacks BEFORE releasing player to prevent use-after-free
-        surfaceView.removeCallbacks(progressRunnable)
+        textureView.removeCallbacks(progressRunnable)
         player?.release()
         player = null
     }

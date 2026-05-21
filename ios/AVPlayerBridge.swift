@@ -34,12 +34,20 @@ final class AVPlayerBridge: NSObject {
 
   /// Called when the host view's bounds change (rotation, resize).
   func updateLayout(bounds: CGRect) {
-    // CALayer frame must be updated on main thread
+    let update = { [weak self] in
+      CATransaction.begin()
+      CATransaction.setDisableActions(true)
+
+      self?.playerLayer?.frame = bounds
+
+      CATransaction.commit()
+    }
+
     if Thread.isMainThread {
-      playerLayer?.frame = bounds
+      update()
     } else {
-      DispatchQueue.main.async { [weak self] in
-        self?.playerLayer?.frame = bounds
+      DispatchQueue.main.async {
+        update()
       }
     }
   }
@@ -141,13 +149,16 @@ final class AVPlayerBridge: NSObject {
   // MARK: - Private helpers
 
   private func createLayer(in view: UIView, player: AVPlayer) {
-    // Remove stale layer before creating a new one
     playerLayer?.removeFromSuperlayer()
 
     let layer = AVPlayerLayer(player: player)
+
     layer.frame = view.bounds
-    layer.videoGravity = .resizeAspect
+    layer.videoGravity = .resizeAspectFill
+    layer.needsDisplayOnBoundsChange = true
+
     view.layer.addSublayer(layer)
+
     playerLayer = layer
   }
 

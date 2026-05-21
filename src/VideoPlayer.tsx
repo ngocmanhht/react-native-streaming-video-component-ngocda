@@ -142,42 +142,38 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
   )
 
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [readyFullscreen, setReadyFullscreen] = useState(false)
   const [currentZoom, setCurrentZoom] = useState(1)
   const [showZoomBadge, setShowZoomBadge] = useState(false)
   const zoomTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // ── Orientation Management ────────────────────────────────────────────────
-useEffect(() => {
-  const changeOrientation = async () => {
+  useEffect(() => {
     try {
       if (isFullscreen) {
-        // Important for iOS
         Orientation.unlockAllOrientations()
+        Orientation.lockToLandscape()
 
         setTimeout(() => {
-          Orientation.lockToLandscape()
-        }, 100)
+          setReadyFullscreen(true)
+        }, 500)
       } else {
-        Orientation.unlockAllOrientations()
+        setReadyFullscreen(false)
 
-        setTimeout(() => {
-          Orientation.lockToPortrait()
-        }, 100)
+        Orientation.unlockAllOrientations()
+        Orientation.lockToPortrait()
       }
     } catch (e) {
       console.warn('Orientation error:', e)
     }
-  }
 
-  changeOrientation()
-
-  return () => {
-    try {
-      Orientation.unlockAllOrientations()
-      Orientation.lockToPortrait()
-    } catch (e) {}
-  }
-}, [isFullscreen])
+    return () => {
+      try {
+        Orientation.unlockAllOrientations()
+        Orientation.lockToPortrait()
+      } catch (e) {}
+    }
+  }, [isFullscreen])
 
   const toggleFullscreen = useCallback(() => {
     setIsFullscreen(fs => !fs)
@@ -190,6 +186,7 @@ useEffect(() => {
   const renderContent = () => {
     const playerEl = (
       <NativeVideoPlayer
+        key={`${isFullscreen}-${streamProtocol}`}
         hybridRef={callback(handleHybridRef)}
         streamProtocol={streamProtocol}
         paused={state.paused}
@@ -203,7 +200,10 @@ useEffect(() => {
         onEnd={onEnd}
         onReady={onReady}
         {...(nativeProps as any)}
-        style={StyleSheet.absoluteFill}
+        style={{
+          width: '100%',
+          height: '100%',
+        }}
       />
     )
 
@@ -275,10 +275,10 @@ useEffect(() => {
         animationType="fade"
         statusBarTranslucent={true}
         supportedOrientations={[
-  'landscape-left',
-  'landscape-right',
-  'portrait',
-]}
+          'landscape-left',
+          'landscape-right',
+          'portrait',
+        ]}
         onRequestClose={toggleFullscreen}>
         <GestureHandlerRootView style={{ flex: 1 }}>
           <StatusBar hidden />
