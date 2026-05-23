@@ -91,7 +91,7 @@ export interface VideoPlayerPublicProps extends Omit<
 
 export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
   style,
-  paused: externalPaused,
+  paused: externalPaused = false,
   volume: initialVolume = 1,
   muted: initialMuted = true,
   showControls = false,
