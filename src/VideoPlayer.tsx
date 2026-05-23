@@ -1,10 +1,31 @@
 import React, { useCallback, useEffect, useState, useRef, type FC, type RefObject } from 'react'
-import { Modal, StatusBar, StyleSheet, View, Text, type StyleProp, type ViewStyle } from 'react-native'
+import {
+  Modal,
+  StatusBar,
+  StyleSheet,
+  View,
+  Text,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native'
 import { getHostComponent, callback } from 'react-native-nitro-modules'
-import Reanimated, { useSharedValue, withTiming, useAnimatedStyle, runOnJS } from 'react-native-reanimated'
+import Reanimated, {
+  useSharedValue,
+  withTiming,
+  useAnimatedStyle,
+  runOnJS,
+} from 'react-native-reanimated'
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler'
 import Orientation from 'react-native-orientation-locker'
-import type { VideoPlayerProps, VideoPlayerView, StreamProtocol } from './VideoPlayer.nitro'
+import type {
+  VideoPlayerProps,
+  VideoPlayerView,
+  StreamProtocol,
+  ReadyEvent,
+  ProgressEvent,
+  ErrorEvent,
+  PlaybackState,
+} from './VideoPlayer.nitro'
 import VideoPlayerViewConfig from '../nitrogen/generated/shared/json/VideoPlayerViewConfig.json'
 import { VideoControls, type ControlIcons } from './VideoControls'
 import { useVideoPlayer } from './useVideoPlayer'
@@ -81,6 +102,15 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
   streamProtocol = 'hls',
   showCameraButton = false,
   onCapture,
+
+  // Extract user callbacks explicitly to avoid them overriding or blocking internal state updates
+  onReady: userOnReady,
+  onProgress: userOnProgress,
+  onBuffering: userOnBuffering,
+  onStateChange: userOnStateChange,
+  onError: userOnError,
+  onEnd: userOnEnd,
+
   ...nativeProps
 }) => {
   // Internal player state management
@@ -145,7 +175,7 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
   const [readyFullscreen, setReadyFullscreen] = useState(false)
   const [currentZoom, setCurrentZoom] = useState(1)
   const [showZoomBadge, setShowZoomBadge] = useState(false)
-  const zoomTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const zoomTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Orientation Management ────────────────────────────────────────────────
   useEffect(() => {
@@ -171,13 +201,61 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
       try {
         Orientation.unlockAllOrientations()
         Orientation.lockToPortrait()
-      } catch (e) {}
+      } catch (e) {
+        console.warn('Orientation error:', e)
+      }
     }
   }, [isFullscreen])
 
   const toggleFullscreen = useCallback(() => {
     setIsFullscreen(fs => !fs)
   }, [])
+
+  // ── Unified Callback Handlers (Fires both internal state and user callbacks) ──
+  const handleReady = useCallback(
+    (event: ReadyEvent) => {
+      onReady()
+      userOnReady?.(event)
+    },
+    [onReady, userOnReady],
+  )
+
+  const handleProgress = useCallback(
+    (event: ProgressEvent) => {
+      onProgress(event)
+      userOnProgress?.(event)
+    },
+    [onProgress, userOnProgress],
+  )
+
+  const handleBuffering = useCallback(
+    (isBuffering: boolean) => {
+      onBuffering(isBuffering)
+      userOnBuffering?.(isBuffering)
+    },
+    [onBuffering, userOnBuffering],
+  )
+
+  const handleStateChange = useCallback(
+    (s: PlaybackState) => {
+      onStateChange(s)
+      userOnStateChange?.(s)
+    },
+    [onStateChange, userOnStateChange],
+  )
+
+  const handleError = useCallback(
+    (event: ErrorEvent) => {
+      onError(event)
+      userOnError?.(event)
+    },
+    [onError, userOnError],
+  )
+
+  const handleEnd = useCallback(() => {
+    onEnd()
+    userOnEnd?.()
+  }, [onEnd, userOnEnd])
 
   // ── Shared native player element ──────────────────────────────────────────
   const zoomScale = useSharedValue(1)
@@ -193,12 +271,12 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
         volume={state.isMuted ? 0 : state.volume}
         muted={state.isMuted}
         zoomEnabled={zoomEnabled && isFullscreen}
-        onStateChange={onStateChange}
-        onProgress={onProgress}
-        onBuffering={onBuffering}
-        onError={onError}
-        onEnd={onEnd}
-        onReady={onReady}
+        onStateChange={handleStateChange}
+        onProgress={handleProgress}
+        onBuffering={handleBuffering}
+        onError={handleError}
+        onEnd={handleEnd}
+        onReady={handleReady}
         {...(nativeProps as any)}
         style={{
           width: '100%',
@@ -218,7 +296,7 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
           savedScale={savedZoomScale}
           player={playerEl}
           controls={controlsEl}
-          onZoomChange={(zoom) => {
+          onZoomChange={zoom => {
             setCurrentZoom(zoom)
             setShowZoomBadge(true)
             if (zoomTimeoutRef.current) clearTimeout(zoomTimeoutRef.current)
@@ -259,11 +337,7 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
     ) : null
 
   if (!isFullscreen) {
-    return (
-      <View style={[styles.container, style]}>
-        {renderContent()}
-      </View>
-    )
+    return <View style={[styles.container, style]}>{renderContent()}</View>
   }
 
   return (
@@ -274,11 +348,7 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
         transparent={false}
         animationType="fade"
         statusBarTranslucent={true}
-        supportedOrientations={[
-          'landscape-left',
-          'landscape-right',
-          'portrait',
-        ]}
+        supportedOrientations={['landscape-left', 'landscape-right', 'portrait']}
         onRequestClose={toggleFullscreen}>
         <GestureHandlerRootView style={{ flex: 1 }}>
           <StatusBar hidden />
@@ -315,7 +385,14 @@ const ZoomableView: FC<{
   }
 
   return (
-    <ZoomableInner style={style} player={player} controls={controls} scale={scale} savedScale={savedScale} onZoomChange={onZoomChange} />
+    <ZoomableInner
+      style={style}
+      player={player}
+      controls={controls}
+      scale={scale}
+      savedScale={savedScale}
+      onZoomChange={onZoomChange}
+    />
   )
 }
 ZoomableView.displayName = 'ZoomableView'
@@ -338,7 +415,7 @@ const ZoomableInner: FC<{
   const savedOffsetY = useSharedValue(0)
 
   const pinchGesture = Gesture.Pinch()
-    .onUpdate((e) => {
+    .onUpdate(e => {
       scale.value = Math.max(1, Math.min(5, savedScale.value * e.scale))
     })
     .onEnd(() => {
@@ -356,7 +433,7 @@ const ZoomableInner: FC<{
     })
 
   const panGesture = Gesture.Pan()
-    .onUpdate((e) => {
+    .onUpdate(e => {
       if (scale.value > 1) {
         offsetX.value = savedOffsetX.value + e.translationX
         offsetY.value = savedOffsetY.value + e.translationY
@@ -380,7 +457,7 @@ const ZoomableInner: FC<{
     transform: [
       { translateX: offsetX.value },
       { translateY: offsetY.value },
-      { scale: scale.value }
+      { scale: scale.value },
     ],
   }))
 
@@ -401,7 +478,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
     justifyContent: 'center',
     overflow: 'hidden',
-
   },
   fullscreenContainer: {
     alignItems: 'center',

@@ -137,10 +137,9 @@ export function useVideoPlayer(options: UseVideoPlayerOptions = {}) {
     [],
   )
 
-  const onEnd = useCallback(
-    () => setState(prev => ({ ...prev, playbackState: 'ended', paused: true })),
-    [],
-  )
+  const onEnd = useCallback(() => {
+    setState(prev => ({ ...prev, playbackState: 'ended', paused: true }))
+  }, [])
 
   const onReady = useCallback(() => setState(prev => ({ ...prev, playbackState: 'ready' })), [])
 
