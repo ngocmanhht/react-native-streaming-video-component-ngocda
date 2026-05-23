@@ -138,8 +138,8 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
 
   // Sync external paused prop
   useEffect(() => {
-    if (externalPaused === undefined) return
-    if (externalPaused) pause()
+    const shouldPause = externalPaused ?? false
+    if (shouldPause) pause()
     else play()
   }, [externalPaused, pause, play])
 
@@ -271,12 +271,12 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
         volume={state.isMuted ? 0 : state.volume}
         muted={state.isMuted}
         zoomEnabled={zoomEnabled && isFullscreen}
-        onStateChange={handleStateChange}
-        onProgress={handleProgress}
-        onBuffering={handleBuffering}
-        onError={handleError}
-        onEnd={handleEnd}
-        onReady={handleReady}
+        onStateChange={callback(handleStateChange)}
+        onProgress={callback(handleProgress)}
+        onBuffering={callback(handleBuffering)}
+        onError={callback(handleError)}
+        onEnd={callback(handleEnd)}
+        onReady={callback(handleReady)}
         {...(nativeProps as any)}
         style={{
           width: '100%',
