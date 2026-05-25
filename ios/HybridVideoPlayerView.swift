@@ -161,8 +161,8 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
       // Stop VLC completely to free its network buffers before switching
       vlcBridge?.stop()
       avBridge?.attach(to: containerView)
-      // HLS is a live stream → optimize for low latency (1 s buffer, no auto-wait)
-      avBridge?.load(url: url, isLiveStream: true)
+      // HLS can be VOD or Live. Use standard, stable buffering to prevent constant stalling.
+      avBridge?.load(url: url, isLiveStream: false)
       // AVPlayer: play() called inside onReady (AVPlayer prepares async before ready)
 
     case .mp4:
