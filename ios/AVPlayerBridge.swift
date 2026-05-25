@@ -12,6 +12,7 @@ final class AVPlayerBridge: NSObject {
 
   // Store target view so we can create the layer AFTER player is ready
   private weak var targetView: UIView?
+  private var currentGravity: AVLayerVideoGravity = .resizeAspect
 
   var onReady: ((Double, CGSize) -> Void)?
   var onProgress: ((Double, Double, Double) -> Void)?
@@ -53,6 +54,7 @@ final class AVPlayerBridge: NSObject {
   }
 
   func setVideoGravity(_ gravity: AVLayerVideoGravity) {
+    currentGravity = gravity
     playerLayer?.videoGravity = gravity
   }
 
@@ -154,7 +156,7 @@ final class AVPlayerBridge: NSObject {
     let layer = AVPlayerLayer(player: player)
 
     layer.frame = view.bounds
-    layer.videoGravity = .resizeAspectFill
+    layer.videoGravity = currentGravity
     layer.needsDisplayOnBoundsChange = true
 
     view.layer.addSublayer(layer)

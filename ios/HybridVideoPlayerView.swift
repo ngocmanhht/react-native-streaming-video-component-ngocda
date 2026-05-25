@@ -400,7 +400,7 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
 
   private func applyResizeMode() {
     switch resizeMode {
-    case .contain: avBridge?.setVideoGravity(.resizeAspectFill)
+    case .contain: avBridge?.setVideoGravity(.resizeAspect)
     case .cover:   avBridge?.setVideoGravity(.resizeAspectFill)
     case .fill:    avBridge?.setVideoGravity(.resize)
     }

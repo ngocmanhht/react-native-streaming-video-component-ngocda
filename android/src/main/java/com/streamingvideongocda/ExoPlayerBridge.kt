@@ -11,11 +11,24 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import java.io.File
 import java.io.FileOutputStream
+import androidx.media3.common.VideoSize
+import com.margelo.nitro.com.streamingvideongocda.ResizeMode
 
 class ExoPlayerBridge(private val context: Context) {
 
     private var player: ExoPlayer? = null
     private val textureView = TextureView(context)
+    private var videoWidth: Int = 0
+    private var videoHeight: Int = 0
+    private var resizeMode: ResizeMode = ResizeMode.CONTAIN
+    private var currentVolume: Float = 1f
+    private var isMuted: Boolean = false
+
+    init {
+        textureView.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            applyScale()
+        }
+    }
 
     var onReady: ((duration: Long) -> Unit)? = null
     var onProgress: ((currentMs: Long, durationMs: Long) -> Unit)? = null
@@ -63,12 +76,18 @@ class ExoPlayerBridge(private val context: Context) {
                         else -> {}
                     }
                 }
+                override fun onVideoSizeChanged(videoSize: VideoSize) {
+                    videoWidth = videoSize.width
+                    videoHeight = videoSize.height
+                    applyScale()
+                }
                 override fun onPlayerError(error: PlaybackException) {
                     textureView.removeCallbacks(progressRunnable)
                     onError?.invoke(error.errorCode, error.localizedMessage ?: "ExoPlayer error")
                 }
             })
             exo.setMediaItem(MediaItem.fromUri(url))
+            exo.volume = if (isMuted) 0f else currentVolume
             exo.prepare()
             // NOTE: Do NOT call play() here – caller (HybridVideoPlayerView) handles it
             // after onReady fires to avoid async race condition
@@ -82,8 +101,19 @@ class ExoPlayerBridge(private val context: Context) {
         player?.stop()
     }
 
-    fun setVolume(volume: Float) { player?.volume = volume.coerceIn(0f, 1f) }
-    fun setMuted(muted: Boolean) { player?.volume = if (muted) 0f else 1f }
+    fun setVolume(volume: Float) {
+        currentVolume = volume.coerceIn(0f, 1f)
+        updatePlayerVolume()
+    }
+
+    fun setMuted(muted: Boolean) {
+        isMuted = muted
+        updatePlayerVolume()
+    }
+
+    private fun updatePlayerVolume() {
+        player?.volume = if (isMuted) 0f else currentVolume
+    }
 
     fun setRepeat(enabled: Boolean) {
         shouldRepeat = enabled
@@ -124,6 +154,60 @@ class ExoPlayerBridge(private val context: Context) {
             file.absolutePath
         } catch (e: Exception) {
             null
+        }
+    }
+
+    fun setResizeMode(mode: ResizeMode) {
+        this.resizeMode = mode
+        applyScale()
+    }
+
+    private fun applyScale() {
+        val viewWidth = textureView.width
+        val viewHeight = textureView.height
+        if (viewWidth <= 0 || viewHeight <= 0 || videoWidth <= 0 || videoHeight <= 0) {
+            return
+        }
+
+        val matrix = android.graphics.Matrix()
+        val viewRatio = viewWidth.toFloat() / viewHeight
+        val videoRatio = videoWidth.toFloat() / videoHeight
+
+        var scaleX = 1f
+        var scaleY = 1f
+
+        when (resizeMode) {
+            ResizeMode.FILL -> {
+                // Identity transform stretches to fill
+            }
+            ResizeMode.CONTAIN -> {
+                if (videoRatio > viewRatio) {
+                    scaleY = viewRatio / videoRatio
+                } else {
+                    scaleX = videoRatio / viewRatio
+                }
+            }
+            ResizeMode.COVER -> {
+                if (videoRatio > viewRatio) {
+                    scaleX = videoRatio / viewRatio
+                } else {
+                    scaleY = viewRatio / videoRatio
+                }
+            }
+        }
+
+        val px = viewWidth / 2f
+        val py = viewHeight / 2f
+        matrix.postScale(scaleX, scaleY, px, py)
+
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+            textureView.setTransform(matrix)
+            textureView.invalidate()
+        } else {
+            Handler(Looper.getMainLooper()).post {
+                textureView.setTransform(matrix)
+                textureView.invalidate()
+            }
         }
     }
 

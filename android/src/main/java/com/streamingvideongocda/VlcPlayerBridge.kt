@@ -37,6 +37,8 @@ class VlcPlayerBridge(private val context: Context) {
     // Strong reference to current Media object to prevent JVM garbage collection finalization
     // from prematurely freeing the native JNI Media pointer during async loading.
     private var currentMedia: Media? = null
+    private var currentVolume: Int = 100
+    private var isMuted: Boolean = false
 
     var onReady: ((duration: Long) -> Unit)? = null
     var onProgress: ((currentMs: Long, durationMs: Long) -> Unit)? = null
@@ -126,8 +128,19 @@ class VlcPlayerBridge(private val context: Context) {
         } catch (_: Exception) {}
     }
 
-    fun setMuted(muted: Boolean) { player.volume = if (muted) 0 else 100 }
-    fun setVolume(volume: Int) { player.volume = volume.coerceIn(0, 200) }
+    fun setVolume(volume: Int) {
+        currentVolume = volume.coerceIn(0, 200)
+        updatePlayerVolume()
+    }
+
+    fun setMuted(muted: Boolean) {
+        isMuted = muted
+        updatePlayerVolume()
+    }
+
+    private fun updatePlayerVolume() {
+        player.volume = if (isMuted) 0 else currentVolume
+    }
 
     fun seekTo(positionMs: Long, onDone: (Boolean) -> Unit) {
         if (!player.isSeekable) { onDone(false); return }

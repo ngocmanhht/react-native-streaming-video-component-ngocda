@@ -47,6 +47,20 @@ export function useVideoPlayer(options: UseVideoPlayerOptions = {}) {
     })
   }, [initialPaused])
 
+  useEffect(() => {
+    setState(prev => {
+      if (prev.volume === initialVolume) return prev
+      return { ...prev, volume: initialVolume }
+    })
+  }, [initialVolume])
+
+  useEffect(() => {
+    setState(prev => {
+      if (prev.isMuted === initialMuted) return prev
+      return { ...prev, isMuted: initialMuted }
+    })
+  }, [initialMuted])
+
   // ── Playback controls ──────────────────────────────────────────────────────
   // IMPORTANT: we update `paused` STATE (which flows as a prop to the native
   // component) rather than calling the imperative play()/pause() methods.
@@ -54,14 +68,14 @@ export function useVideoPlayer(options: UseVideoPlayerOptions = {}) {
   // because the prop still says paused=false but we called pause() imperatively.
 
   const play = useCallback(() => {
-    setState(prev => ({ ...prev, paused: false }))
+    setState(prev => ({ ...prev, paused: false, playbackState: 'playing' }))
     if (typeof ref.current?.play === 'function') {
       ref.current.play()
     }
   }, [])
 
   const pause = useCallback(() => {
-    setState(prev => ({ ...prev, paused: true }))
+    setState(prev => ({ ...prev, paused: true, playbackState: 'paused' }))
     if (typeof ref.current?.pause === 'function') {
       ref.current.pause()
     }

@@ -136,22 +136,17 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
     initialMuted,
   })
 
-  // Sync external paused prop
+  // Sync external paused prop → chỉ chạy khi externalPaused thực sự thay đổi
+  // Dùng ref để phân biệt lần mount đầu tiên vs thay đổi thực sự
+  const prevExternalPaused = useRef(externalPaused)
   useEffect(() => {
-    const shouldPause = externalPaused ?? false
-    if (shouldPause) pause()
+    if (prevExternalPaused.current === externalPaused) return
+    prevExternalPaused.current = externalPaused
+    if (externalPaused) pause()
     else play()
   }, [externalPaused, pause, play])
 
-  // Sync volume if it changes externally
-  const isMounted = React.useRef(false)
-  useEffect(() => {
-    if (!isMounted.current) {
-      isMounted.current = true
-      return
-    }
-    setVolume(initialVolume)
-  }, [initialVolume, setVolume])
+
 
   // ── Ref Management ───────────────────────────────────────────────────────
   // We use a callback ref to ensure internalRef is always set (for useVideoPlayer logic)
@@ -264,7 +259,7 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
   const renderContent = () => {
     const playerEl = (
       <NativeVideoPlayer
-        key={`${isFullscreen}-${streamProtocol}`}
+        key={streamProtocol}
         hybridRef={callback(handleHybridRef)}
         streamProtocol={streamProtocol}
         paused={state.paused}
@@ -344,6 +339,7 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
     <>
       <View style={[styles.container, style]} pointerEvents="none" />
       <Modal
+        key={`${isFullscreen}-${streamProtocol}`}
         visible={isFullscreen}
         transparent={false}
         animationType="fade"
@@ -353,7 +349,7 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
         <GestureHandlerRootView style={{ flex: 1 }}>
           <StatusBar hidden />
           <View style={styles.fullscreenContainer}>
-            {renderContent()}
+            {readyFullscreen ? renderContent() : null}
             {showZoomBadge && currentZoom > 1.05 && (
               <View style={styles.zoomBadge}>
                 <Text style={styles.zoomBadgeText}>{currentZoom.toFixed(1)}x</Text>
@@ -480,10 +476,14 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   fullscreenContainer: {
-    alignItems: 'center',
     backgroundColor: '#000',
-    flex: 1,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     justifyContent: 'center',
+    alignItems: 'center',
   },
   zoomBadge: {
     backgroundColor: 'rgba(0,0,0,0.6)',

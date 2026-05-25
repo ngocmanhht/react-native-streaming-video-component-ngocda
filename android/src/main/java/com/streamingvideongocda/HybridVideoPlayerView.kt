@@ -169,6 +169,7 @@ class HybridVideoPlayerView(private val ctx: ReactContext)
         )
         rootLayout.requestLayout()
         exo.load(url)
+        exo.setResizeMode(resizeMode)
         if (!paused) {
             Log.d("StreamingVideo", "loadExo -> calling exo.play() immediately")
             exo.play()
@@ -216,8 +217,7 @@ class HybridVideoPlayerView(private val ctx: ReactContext)
     }
 
     private fun applyResizeMode() {
-        // ExoPlayer resize is handled by the SurfaceView aspect ratio
-        // For now, MATCH_PARENT covers all cases — can extend with AspectRatioFrameLayout later
+        exo.setResizeMode(resizeMode)
     }
 
     // ── Methods ──────────────────────────────────────────────────────────────

@@ -72,7 +72,10 @@ const FallbackIcon: FC<{ label: string } & IconProps> = ({ label, size = 20, col
 )
 FallbackIcon.displayName = 'FallbackIcon'
 
-const mkIcon = (IconComponent: ComponentType<IconProps>, emoji: string): ComponentType<IconProps> => {
+const mkIcon = (
+  IconComponent: ComponentType<IconProps>,
+  emoji: string,
+): ComponentType<IconProps> => {
   const WrappedIcon: FC<IconProps> = p => {
     if (IconComponent) return <IconComponent {...p} />
     return <FallbackIcon label={emoji} {...p} />
@@ -377,7 +380,7 @@ export const VideoControls: FC<VideoControlsProps> = ({
   const showVolume = containerSize.width > 200 && showBottomControls
   const showFullscreen = containerSize.width > 100 && showBottomControls
   const showCenterSeeks = containerSize.width > 180
-  const showCamera = showCameraButton  && containerSize.width > 120 && showBottomControls
+  const showCamera = showCameraButton && containerSize.width > 120 && showBottomControls
 
   return (
     <Pressable
@@ -397,14 +400,17 @@ export const VideoControls: FC<VideoControlsProps> = ({
             ]}>
             {isLive && (
               <View style={styles.liveBadge}>
-                <Text style={[styles.liveBadgeText, { fontSize: iconSizes.timeText * 1.5}]}>
+                <Text style={[styles.liveBadgeText, { fontSize: iconSizes.timeText * 1.5 }]}>
                   ● LIVE
                 </Text>
               </View>
             )}
             <View style={styles.flexSpacer} />
             {showCamera && (
-              <Pressable style={styles.iconBtn} onPress={onCapture} accessibilityLabel="Take screenshot">
+              <Pressable
+                style={styles.iconBtn}
+                onPress={onCapture}
+                accessibilityLabel="Take screenshot">
                 <icons.camera size={iconSizes.bottom + 2} color="#fff" />
               </Pressable>
             )}
@@ -417,7 +423,7 @@ export const VideoControls: FC<VideoControlsProps> = ({
                 onPress={() => handleSeekBy(-seekInterval)}
                 disabled={seekDisabled}
                 accessibilityLabel={`Seek back ${seekInterval} seconds`}>
-                <icons.seekBack size={iconSizes.seek } color={seekDisabled ? '#555' : '#fff'} />
+                <icons.seekBack size={iconSizes.seek} color={seekDisabled ? '#555' : '#fff'} />
               </Pressable>
             )}
 
@@ -603,5 +609,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     position: 'relative',
   },
-
 })
