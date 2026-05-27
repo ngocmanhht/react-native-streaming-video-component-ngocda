@@ -312,9 +312,9 @@ class HybridVideoPlayerView(private val ctx: ReactContext)
         }
         exo.onError = { code, msg ->
             Log.e("StreamingVideo", "ExoPlayer onError: code=$code, msg=$msg")
-            // RTSP error on ExoPlayer → fall back to LibVLC (ExoPlayer doesn't support all RTSP codecs)
-            if (activeProtocol == StreamProtocol.RTSP && !useVlcFallback) {
-                Log.d("StreamingVideo", "ExoPlayer RTSP failed -> falling back to VLC")
+            // If HLS or MP4 fails on ExoPlayer, fall back to VLC
+            if ((activeProtocol == StreamProtocol.HLS || activeProtocol == StreamProtocol.MP4) && !useVlcFallback) {
+                Log.d("StreamingVideo", "ExoPlayer failed -> falling back to VLC")
                 useVlcFallback = true
                 loadVlc()
             } else {

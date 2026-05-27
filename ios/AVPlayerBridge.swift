@@ -80,8 +80,9 @@ final class AVPlayerBridge: NSObject {
 
     if isLiveStream {
       // ── HLS live stream: optimise for low latency ───────────────────────────────
-      // Only 1 s of buffer needed before starting — cuts initial load time
-      item.preferredForwardBufferDuration = 1.0
+      // Set to 0.0 to let AVPlayer automatically determine the optimal buffer duration
+      // based on playlist chunk size, avoiding micro-stuttering on larger chunk streams.
+      item.preferredForwardBufferDuration = 0.0
     } else {
       // ── MP4 / VOD: optimise for smooth, stall-free playback ────────────────────
       // Buffer 10 s ahead so seeking & playback are smooth

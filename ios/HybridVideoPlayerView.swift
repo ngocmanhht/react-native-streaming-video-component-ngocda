@@ -21,6 +21,7 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
   private var avBridge: AVPlayerBridge?
   private var vlcBridge: VLCPlayerBridge?
   private var activeProtocol: StreamProtocol = .hls
+  private var useVlcFallback = false
 
   // MARK: - Init
 
@@ -162,37 +163,39 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
   private func reloadPlayer() {
     guard !url.isEmpty else { return }
     activeProtocol = streamProtocol
+    useVlcFallback = false
     onStateChange?(.loading)
 
     switch activeProtocol {
     case .hls:
-      // Stop VLC completely to free its network buffers before switching
-      vlcBridge?.stop()
-      avBridge?.attach(to: containerView)
-      // Use the isLive prop to determine low-latency vs smooth-buffering behavior
-      avBridge?.load(url: url, isLiveStream: isLive)
-      // AVPlayer: play() called inside onReady (AVPlayer prepares async before ready)
+      loadAVPlayer(isLiveStream: isLive)
 
     case .mp4:
-      vlcBridge?.stop()
-      avBridge?.attach(to: containerView)
-      // MP4 is typically VOD, but will respect isLive override if provided
-      avBridge?.load(url: url, isLiveStream: isLive)
-      // AVPlayer: play() called inside onReady
+      loadAVPlayer(isLiveStream: isLive)
 
     case .rtsp:
-      // Stop AVPlayer before switching to VLC
-      avBridge?.stop()
-      vlcBridge?.attach(to: containerView)
-      vlcBridge?.load(url: url)
-      // VLC MUST call play() immediately to START the RTSP connection.
-      // Unlike AVPlayer, VLC only fires .playing (our onReady) AFTER play() is called.
-      // Waiting for onReady to call play() creates a deadlock → black screen.
-      if !paused { vlcBridge?.play() }
+      loadVlc()
     }
   }
 
+  private func loadAVPlayer(isLiveStream: Bool) {
+    vlcBridge?.stop()
+    avBridge?.attach(to: containerView)
+    avBridge?.load(url: url, isLiveStream: isLiveStream)
+  }
+
+  private func loadVlc() {
+    avBridge?.stop()
+    vlcBridge?.attach(to: containerView)
+    vlcBridge?.load(url: url)
+    if !paused { vlcBridge?.play() }
+  }
+
   private func activePlay() {
+    if useVlcFallback {
+      vlcBridge?.play()
+      return
+    }
     switch activeProtocol {
     case .hls, .mp4:
       avBridge?.play()
@@ -211,6 +214,10 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
   }
 
   private func activePause() {
+    if useVlcFallback {
+      vlcBridge?.pause()
+      return
+    }
     switch activeProtocol {
     case .hls, .mp4:
       avBridge?.pause()
@@ -243,25 +250,35 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
         promise.reject(withError: NSError(domain: "StreamingVideo", code: -1, userInfo: [NSLocalizedDescriptionKey: "Player deallocated"]))
         return
       }
-      switch self.activeProtocol {
-      case .hls, .mp4:
-        self.avBridge?.seek(to: positionSeconds) { finished in
-          if finished {
-            promise.resolve(withResult: ())
-          } else {
-            promise.reject(withError: NSError(
-              domain: "StreamingVideo", code: 2,
-              userInfo: [NSLocalizedDescriptionKey: "AVPlayer seek failed"]))
-          }
-        }
-      case .rtsp:
+      if self.useVlcFallback {
         self.vlcBridge?.seek(to: positionSeconds) { success in
           if success {
             promise.resolve(withResult: ())
           } else {
-            promise.reject(withError: NSError(
-              domain: "StreamingVideo", code: 2,
-              userInfo: [NSLocalizedDescriptionKey: "VLC seek failed (stream not seekable)"]))
+            promise.reject(withError: NSError(domain: "StreamingVideo", code: 2, userInfo: [NSLocalizedDescriptionKey: "VLC seek failed"]))
+          }
+        }
+      } else {
+        switch self.activeProtocol {
+        case .hls, .mp4:
+          self.avBridge?.seek(to: positionSeconds) { finished in
+            if finished {
+              promise.resolve(withResult: ())
+            } else {
+              promise.reject(withError: NSError(
+                domain: "StreamingVideo", code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "AVPlayer seek failed"]))
+            }
+          }
+        case .rtsp:
+          self.vlcBridge?.seek(to: positionSeconds) { success in
+            if success {
+              promise.resolve(withResult: ())
+            } else {
+              promise.reject(withError: NSError(
+                domain: "StreamingVideo", code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "VLC seek failed (stream not seekable)"]))
+            }
           }
         }
       }
@@ -276,9 +293,13 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
         promise.resolve(withResult: 0.0)
         return
       }
-      switch self.activeProtocol {
-      case .hls, .mp4: promise.resolve(withResult: self.avBridge?.currentTime ?? 0.0)
-      case .rtsp:       promise.resolve(withResult: self.vlcBridge?.currentTime ?? 0.0)
+      if self.useVlcFallback {
+        promise.resolve(withResult: self.vlcBridge?.currentTime ?? 0.0)
+      } else {
+        switch self.activeProtocol {
+        case .hls, .mp4: promise.resolve(withResult: self.avBridge?.currentTime ?? 0.0)
+        case .rtsp:       promise.resolve(withResult: self.vlcBridge?.currentTime ?? 0.0)
+        }
       }
     }
     return promise
@@ -291,9 +312,13 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
         promise.resolve(withResult: -1.0)
         return
       }
-      switch self.activeProtocol {
-      case .hls, .mp4: promise.resolve(withResult: self.avBridge?.duration ?? -1.0)
-      case .rtsp:       promise.resolve(withResult: self.vlcBridge?.duration ?? -1.0)
+      if self.useVlcFallback {
+        promise.resolve(withResult: self.vlcBridge?.duration ?? -1.0)
+      } else {
+        switch self.activeProtocol {
+        case .hls, .mp4: promise.resolve(withResult: self.avBridge?.duration ?? -1.0)
+        case .rtsp:       promise.resolve(withResult: self.vlcBridge?.duration ?? -1.0)
+        }
       }
     }
     return promise
@@ -316,21 +341,31 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
         promise.reject(withError: NSError(domain: "StreamingVideo", code: -1, userInfo: [NSLocalizedDescriptionKey: "Player deallocated"]))
         return
       }
-      switch self.activeProtocol {
-      case .hls, .mp4:
-        self.avBridge?.takeScreenshot { path in
-          if let path = path {
-            promise.resolve(withResult: path)
-          } else {
-            promise.reject(withError: NSError(domain: "StreamingVideo", code: 3, userInfo: [NSLocalizedDescriptionKey: "AVPlayer capture failed"]))
-          }
-        }
-      case .rtsp:
+      if self.useVlcFallback {
         self.vlcBridge?.takeScreenshot { path in
           if let path = path {
             promise.resolve(withResult: path)
           } else {
             promise.reject(withError: NSError(domain: "StreamingVideo", code: 3, userInfo: [NSLocalizedDescriptionKey: "VLC capture failed"]))
+          }
+        }
+      } else {
+        switch self.activeProtocol {
+        case .hls, .mp4:
+          self.avBridge?.takeScreenshot { path in
+            if let path = path {
+              promise.resolve(withResult: path)
+            } else {
+              promise.reject(withError: NSError(domain: "StreamingVideo", code: 3, userInfo: [NSLocalizedDescriptionKey: "AVPlayer capture failed"]))
+            }
+          }
+        case .rtsp:
+          self.vlcBridge?.takeScreenshot { path in
+            if let path = path {
+              promise.resolve(withResult: path)
+            } else {
+              promise.reject(withError: NSError(domain: "StreamingVideo", code: 3, userInfo: [NSLocalizedDescriptionKey: "VLC capture failed"]))
+            }
           }
         }
       }
@@ -359,8 +394,17 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
       self?.onStateChange?(isBuffering ? .buffering : .playing)
     }
     avBridge?.onError = { [weak self] code, message in
-      self?.onError?(.init(code: Double(code), message: message, nativeError: nil))
-      self?.onStateChange?(.error)
+      guard let self = self else { return }
+      if (self.activeProtocol == .hls || self.activeProtocol == .mp4) && !self.useVlcFallback {
+        print("StreamingVideo: AVPlayer failed with code \(code) (\(message)), falling back to VLCPlayer")
+        self.useVlcFallback = true
+        DispatchQueue.main.async {
+          self.loadVlc()
+        }
+      } else {
+        self.onError?(.init(code: Double(code), message: message, nativeError: nil))
+        self.onStateChange?(.error)
+      }
     }
     avBridge?.onEnd = { [weak self] in
       self?.onEnd?()
