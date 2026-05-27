@@ -13,6 +13,7 @@
     "shouldRepeat": true,
     "progressInterval": true,
     "zoomEnabled": true,
+    "isLive": true,
     "onReady": true,
     "onProgress": true,
     "onBuffering": true,

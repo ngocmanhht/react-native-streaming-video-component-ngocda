@@ -19,6 +19,7 @@ public protocol HybridVideoPlayerViewSpec_protocol: HybridObject, HybridView {
   var shouldRepeat: Bool { get set }
   var progressInterval: Double { get set }
   var zoomEnabled: Bool { get set }
+  var isLive: Bool { get set }
   var onReady: ((_ event: ReadyEvent) -> Void)? { get set }
   var onProgress: ((_ event: ProgressEvent) -> Void)? { get set }
   var onBuffering: ((_ isBuffering: Bool) -> Void)? { get set }

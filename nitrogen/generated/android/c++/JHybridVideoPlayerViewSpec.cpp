@@ -161,6 +161,15 @@ namespace margelo::nitro::streamingvideo {
     static const auto method = _javaPart->javaClassStatic()->getMethod<void(jboolean /* zoomEnabled */)>("setZoomEnabled");
     method(_javaPart, zoomEnabled);
   }
+  bool JHybridVideoPlayerViewSpec::getIsLive() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jboolean()>("isLive");
+    auto __result = method(_javaPart);
+    return static_cast<bool>(__result);
+  }
+  void JHybridVideoPlayerViewSpec::setIsLive(bool isLive) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<void(jboolean /* isLive */)>("setLive");
+    method(_javaPart, isLive);
+  }
   std::optional<std::function<void(const ReadyEvent& /* event */)>> JHybridVideoPlayerViewSpec::getOnReady() {
     static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<JFunc_void_ReadyEvent::javaobject>()>("getOnReady_cxx");
     auto __result = method(_javaPart);

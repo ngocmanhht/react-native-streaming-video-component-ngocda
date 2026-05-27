@@ -57,6 +57,7 @@ namespace margelo::nitro::streamingvideo::views {
     CachedProp<bool> shouldRepeat;
     CachedProp<double> progressInterval;
     CachedProp<bool> zoomEnabled;
+    CachedProp<bool> isLive;
     CachedProp<std::optional<std::function<void(const ReadyEvent& /* event */)>>> onReady;
     CachedProp<std::optional<std::function<void(const ProgressEvent& /* event */)>>> onProgress;
     CachedProp<std::optional<std::function<void(bool /* isBuffering */)>>> onBuffering;

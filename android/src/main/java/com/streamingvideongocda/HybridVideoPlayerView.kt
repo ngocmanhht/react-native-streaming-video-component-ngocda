@@ -123,6 +123,13 @@ class HybridVideoPlayerView(private val ctx: ReactContext)
 
     override var zoomEnabled: Boolean = false
 
+    override var isLive: Boolean = false
+        set(value) {
+            if (value == field) return
+            field = value
+            reloadPlayer()
+        }
+
     // ── Player lifecycle ─────────────────────────────────────────────────────
 
     private fun reloadPlayer() {
@@ -280,7 +287,7 @@ class HybridVideoPlayerView(private val ctx: ReactContext)
     private fun bindExo() {
         exo.onReady = { dur ->
             Log.d("StreamingVideo", "ExoPlayer onReady: durationMs=$dur")
-            onReady?.invoke(ReadyEvent(dur / 1000.0, NaturalSize(0.0, 0.0)))
+            onReady?.invoke(ReadyEvent(if (dur < 0) -1.0 else dur / 1000.0, NaturalSize(0.0, 0.0)))
             onStateChange?.invoke(PlaybackState.READY)
             // Async-safe auto-play: only play after ExoPlayer signals it is ready
             if (!paused) exo.play()

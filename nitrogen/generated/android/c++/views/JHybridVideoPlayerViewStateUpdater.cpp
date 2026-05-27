@@ -73,6 +73,10 @@ void JHybridVideoPlayerViewStateUpdater::updateViewProps(jni::alias_ref<jni::JCl
     hybridView->setZoomEnabled(props->zoomEnabled.value);
     props->zoomEnabled.isDirty = false;
   }
+  if (props->isLive.isDirty) {
+    hybridView->setIsLive(props->isLive.value);
+    props->isLive.isDirty = false;
+  }
   if (props->onReady.isDirty) {
     hybridView->setOnReady(props->onReady.value);
     props->onReady.isDirty = false;

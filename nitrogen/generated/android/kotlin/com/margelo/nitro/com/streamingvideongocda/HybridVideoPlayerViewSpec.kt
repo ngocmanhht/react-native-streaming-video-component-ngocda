@@ -81,6 +81,12 @@ abstract class HybridVideoPlayerViewSpec: HybridView() {
   @set:Keep
   abstract var zoomEnabled: Boolean
   
+  @get:DoNotStrip
+  @get:Keep
+  @set:DoNotStrip
+  @set:Keep
+  abstract var isLive: Boolean
+  
   abstract var onReady: ((event: ReadyEvent) -> Unit)?
   
   private var onReady_cxx: Func_void_ReadyEvent?

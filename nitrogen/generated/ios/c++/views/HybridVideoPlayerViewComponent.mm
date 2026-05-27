@@ -117,6 +117,11 @@ using namespace margelo::nitro::streamingvideo::views;
     swiftPart.setZoomEnabled(newViewProps.zoomEnabled.value);
     newViewProps.zoomEnabled.isDirty = false;
   }
+  // isLive: boolean
+  if (newViewProps.isLive.isDirty) {
+    swiftPart.setIsLive(newViewProps.isLive.value);
+    newViewProps.isLive.isDirty = false;
+  }
   // onReady: optional
   if (newViewProps.onReady.isDirty) {
     swiftPart.setOnReady(newViewProps.onReady.value);

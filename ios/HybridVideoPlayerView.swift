@@ -134,6 +134,14 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
   }
 
   var zoomEnabled: Bool = false
+  var isLive: Bool = false {
+    didSet {
+      guard isLive != oldValue else { return }
+      DispatchQueue.main.async { [weak self] in
+        self?.reloadPlayer()
+      }
+    }
+  }
 
 
   // MARK: - Callbacks
@@ -161,15 +169,15 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
       // Stop VLC completely to free its network buffers before switching
       vlcBridge?.stop()
       avBridge?.attach(to: containerView)
-      // HLS can be VOD or Live. Use standard, stable buffering to prevent constant stalling.
-      avBridge?.load(url: url, isLiveStream: false)
+      // Use the isLive prop to determine low-latency vs smooth-buffering behavior
+      avBridge?.load(url: url, isLiveStream: isLive)
       // AVPlayer: play() called inside onReady (AVPlayer prepares async before ready)
 
     case .mp4:
       vlcBridge?.stop()
       avBridge?.attach(to: containerView)
-      // MP4 is VOD → optimize for smooth playback (10 s buffer, auto-wait enabled)
-      avBridge?.load(url: url, isLiveStream: false)
+      // MP4 is typically VOD, but will respect isLive override if provided
+      avBridge?.load(url: url, isLiveStream: isLive)
       // AVPlayer: play() called inside onReady
 
     case .rtsp:

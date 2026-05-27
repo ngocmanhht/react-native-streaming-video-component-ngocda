@@ -220,6 +220,17 @@ open class HybridVideoPlayerViewSpec_cxx {
     }
   }
   
+  public final var isLive: Bool {
+    @inline(__always)
+    get {
+      return self.__implementation.isLive
+    }
+    @inline(__always)
+    set {
+      self.__implementation.isLive = newValue
+    }
+  }
+  
   public final var onReady: bridge.std__optional_std__function_void_const_ReadyEvent_____event______ {
     @inline(__always)
     get {

@@ -102,6 +102,7 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
   streamProtocol = 'hls',
   showCameraButton = false,
   onCapture,
+  isLive = false,
 
   // Extract user callbacks explicitly to avoid them overriding or blocking internal state updates
   onReady: userOnReady,
@@ -266,6 +267,7 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
         volume={state.isMuted ? 0 : state.volume}
         muted={state.isMuted}
         zoomEnabled={zoomEnabled && isFullscreen}
+        isLive={isLive}
         onStateChange={callback(handleStateChange)}
         onProgress={callback(handleProgress)}
         onBuffering={callback(handleBuffering)}

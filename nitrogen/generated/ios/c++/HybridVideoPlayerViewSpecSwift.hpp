@@ -142,6 +142,12 @@ namespace margelo::nitro::streamingvideo {
     inline void setZoomEnabled(bool zoomEnabled) noexcept override {
       _swiftPart.setZoomEnabled(std::forward<decltype(zoomEnabled)>(zoomEnabled));
     }
+    inline bool getIsLive() noexcept override {
+      return _swiftPart.isLive();
+    }
+    inline void setIsLive(bool isLive) noexcept override {
+      _swiftPart.setIsLive(std::forward<decltype(isLive)>(isLive));
+    }
     inline std::optional<std::function<void(const ReadyEvent& /* event */)>> getOnReady() noexcept override {
       auto __result = _swiftPart.getOnReady();
       return __result;

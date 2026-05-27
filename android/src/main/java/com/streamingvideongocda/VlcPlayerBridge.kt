@@ -105,6 +105,12 @@ class VlcPlayerBridge(private val context: Context) {
         val media = Media(libVLC, Uri.parse(url)).apply {
             addOption("rtsp-tcp")
             addOption(":rtsp-tcp")
+            addOption("network-caching=1000")
+            addOption(":network-caching=1000")
+            addOption("clock-jitter=0")
+            addOption(":clock-jitter=0")
+            addOption("clock-synchro=0")
+            addOption(":clock-synchro=0")
         }
         currentMedia = media
         player.media = media

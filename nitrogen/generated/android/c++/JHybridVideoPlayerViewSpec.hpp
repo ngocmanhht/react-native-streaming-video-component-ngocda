@@ -68,6 +68,8 @@ namespace margelo::nitro::streamingvideo {
     void setProgressInterval(double progressInterval) override;
     bool getZoomEnabled() override;
     void setZoomEnabled(bool zoomEnabled) override;
+    bool getIsLive() override;
+    void setIsLive(bool isLive) override;
     std::optional<std::function<void(const ReadyEvent& /* event */)>> getOnReady() override;
     void setOnReady(const std::optional<std::function<void(const ReadyEvent& /* event */)>>& onReady) override;
     std::optional<std::function<void(const ProgressEvent& /* event */)>> getOnProgress() override;
