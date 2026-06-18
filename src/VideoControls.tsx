@@ -186,14 +186,52 @@ interface SeekBarProps {
 }
 
 const SeekBar: FC<SeekBarProps> = ({ currentTime, duration, disabled, onSeek }) => {
+  const [value, setValue] = useState(currentTime)
+  const isSliding = useRef(false)
+  const lastSeekTime = useRef(0)
+
+  // Keep local slider value in sync with player time when not sliding
+  useEffect(() => {
+    if (!isSliding.current) {
+      setValue(currentTime)
+    }
+  }, [currentTime])
+
+  const handleValueChange = useCallback(
+    (val: number) => {
+      setValue(val)
+      // Throttled real-time scrubbing (seek at most once every 150ms) to keep playback rendering responsive
+      const now = Date.now()
+      if (now - lastSeekTime.current > 150) {
+        lastSeekTime.current = now
+        onSeek(val)
+      }
+    },
+    [onSeek],
+  )
+
+  const handleSlidingStart = useCallback(() => {
+    isSliding.current = true
+  }, [])
+
+  const handleSlidingComplete = useCallback(
+    (val: number) => {
+      isSliding.current = false
+      onSeek(val)
+    },
+    [onSeek],
+  )
+
   return (
     <View style={styles.seekContainer}>
       <Slider
         style={styles.seekSlider}
-        value={currentTime}
+        value={value}
         minimumValue={0}
         maximumValue={duration}
-        onSlidingComplete={onSeek}
+        onValueChange={handleValueChange}
+        onSlidingStart={handleSlidingStart}
+        onSlidingComplete={handleSlidingComplete}
         disabled={disabled}
         thumbSize={12}
         minimumTrackTintColor="#fff"

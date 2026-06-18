@@ -138,7 +138,7 @@ final class AVPlayerBridge: NSObject {
 
   func seek(to seconds: Double, completion: @escaping (Bool) -> Void) {
     let time = CMTime(seconds: seconds, preferredTimescale: 600)
-    player?.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero) { finished in
+    player?.seek(to: time) { finished in
       completion(finished)
     }
   }
