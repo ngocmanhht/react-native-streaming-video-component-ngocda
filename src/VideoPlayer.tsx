@@ -210,7 +210,7 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
   // ── Unified Callback Handlers (Fires both internal state and user callbacks) ──
   const handleReady = useCallback(
     (event: ReadyEvent) => {
-      onReady()
+      onReady(event)
       userOnReady?.(event)
     },
     [onReady, userOnReady],

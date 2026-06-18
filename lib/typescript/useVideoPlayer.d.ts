@@ -36,7 +36,9 @@ export declare function useVideoPlayer(options?: UseVideoPlayerOptions): {
         message: string;
     }) => void;
     onEnd: () => void;
-    onReady: () => void;
+    onReady: (event?: {
+        duration: number;
+    }) => void;
 };
 export {};
 //# sourceMappingURL=useVideoPlayer.d.ts.map

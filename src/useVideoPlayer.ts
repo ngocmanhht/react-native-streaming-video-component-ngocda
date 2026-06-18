@@ -155,7 +155,15 @@ export function useVideoPlayer(options: UseVideoPlayerOptions = {}) {
     setState(prev => ({ ...prev, playbackState: 'ended', paused: true }))
   }, [])
 
-  const onReady = useCallback(() => setState(prev => ({ ...prev, playbackState: 'ready' })), [])
+  const onReady = useCallback(
+    (event?: { duration: number }) =>
+      setState(prev => ({
+        ...prev,
+        playbackState: 'ready',
+        duration: event?.duration ?? prev.duration,
+      })),
+    [],
+  )
 
   const takeScreenshot = useCallback(async () => {
     if (typeof ref.current?.takeScreenshot === 'function') {

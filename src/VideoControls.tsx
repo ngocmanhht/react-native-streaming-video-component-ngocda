@@ -111,7 +111,7 @@ function formatTime(seconds: number): string {
 const pad = (n: number) => String(n).padStart(2, '0')
 
 /** RTSP and HLS are near-realtime; seeking is not meaningful */
-const isLiveProtocol = (p: StreamProtocol) => p === 'rtsp' || p === 'hls'
+const isLiveProtocol = (p: StreamProtocol, duration: number) => p === 'rtsp' || (p === 'hls' && duration <= 0)
 
 const isActiveState = (s: PlaybackState) =>
   s === 'playing' || s === 'paused' || s === 'buffering' || s === 'ready'
@@ -344,7 +344,7 @@ export const VideoControls: FC<VideoControlsProps> = ({
     }
   }, [state.playbackState, scheduleHide])
 
-  const isLive = isLiveProtocol(streamProtocol)
+  const isLive = isLiveProtocol(streamProtocol, state.duration)
   const isRtsp = streamProtocol === 'rtsp'
   const seekDisabled = isLive || state.duration <= 0
   const isActive = isActiveState(state.playbackState)
