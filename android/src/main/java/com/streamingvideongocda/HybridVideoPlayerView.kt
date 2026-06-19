@@ -189,6 +189,22 @@ class HybridVideoPlayerView(private val ctx: ReactContext)
         exo.stop()
         rootLayout.removeAllViews()
         val vlcLayout = VLCVideoLayout(ctx)
+        vlcLayout.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            val w = vlcLayout.width
+            val h = vlcLayout.height
+            if (w > 0 && h > 0) {
+                for (i in 0 until vlcLayout.childCount) {
+                    val child = vlcLayout.getChildAt(i)
+                    child.post {
+                        child.measure(
+                            android.view.View.MeasureSpec.makeMeasureSpec(w, android.view.View.MeasureSpec.EXACTLY),
+                            android.view.View.MeasureSpec.makeMeasureSpec(h, android.view.View.MeasureSpec.EXACTLY)
+                        )
+                        child.layout(0, 0, w, h)
+                    }
+                }
+            }
+        }
         rootLayout.addView(
             vlcLayout,
             FrameLayout.LayoutParams(

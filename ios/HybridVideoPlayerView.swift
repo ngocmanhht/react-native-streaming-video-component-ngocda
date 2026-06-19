@@ -50,7 +50,17 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
     // Observe containerView.bounds so AVPlayerLayer stays in sync on rotation/resize
     layoutObserver = containerView.observe(\.bounds, options: [.new]) { [weak self] view, _ in
       DispatchQueue.main.async {
-        self?.avBridge?.updateLayout(bounds: view.bounds)
+        guard let self = self else { return }
+        self.avBridge?.updateLayout(bounds: view.bounds)
+        
+        // Update VLC rendering subviews frame on bounds change
+        if self.useVlcFallback || self.activeProtocol == .rtsp {
+          for subview in view.subviews {
+            if !(subview is AVRoutePickerView) {
+              subview.frame = view.bounds
+            }
+          }
+        }
       }
     }
   }
