@@ -4,14 +4,36 @@ import AVFoundation
 import AVKit
 import NitroModules
 
+private class HybridVideoPlayerContainerView: UIView {
+  var onLayoutSubviews: ((CGRect) -> Void)?
+
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    onLayoutSubviews?(bounds)
+  }
+}
+
 class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
 
   // MARK: - Native view
 
-  private lazy var containerView: UIView = {
-    let v = UIView()
+  private lazy var containerView: HybridVideoPlayerContainerView = {
+    let v = HybridVideoPlayerContainerView()
     v.backgroundColor = .black
     v.clipsToBounds = true
+    v.onLayoutSubviews = { [weak self] bounds in
+      guard let self = self else { return }
+      self.avBridge?.updateLayout(bounds: bounds)
+      
+      // Update VLC rendering subviews frame on bounds change
+      if self.useVlcFallback || self.activeProtocol == .rtsp {
+        for subview in v.subviews {
+          if !(subview is AVRoutePickerView) {
+            subview.frame = bounds
+          }
+        }
+      }
+    }
     return v
   }()
   var view: UIView { containerView }
@@ -33,34 +55,10 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
       self.vlcBridge = VLCPlayerBridge()
       self.bindAVBridge()
       self.bindVLCBridge()
-      self.setupLayoutObserver()
       
       // If a URL was set before main-thread initialization completed, load it now
       if !self.url.isEmpty {
         self.reloadPlayer()
-      }
-    }
-  }
-
-  // MARK: - Layout (fixes AVPlayerLayer not tracking view size)
-
-  private var layoutObserver: NSKeyValueObservation?
-
-  private func setupLayoutObserver() {
-    // Observe containerView.bounds so AVPlayerLayer stays in sync on rotation/resize
-    layoutObserver = containerView.observe(\.bounds, options: [.new]) { [weak self] view, _ in
-      DispatchQueue.main.async {
-        guard let self = self else { return }
-        self.avBridge?.updateLayout(bounds: view.bounds)
-        
-        // Update VLC rendering subviews frame on bounds change
-        if self.useVlcFallback || self.activeProtocol == .rtsp {
-          for subview in view.subviews {
-            if !(subview is AVRoutePickerView) {
-              subview.frame = view.bounds
-            }
-          }
-        }
       }
     }
   }
@@ -472,7 +470,7 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
   // MARK: - Deinit (Memory leak prevention)
 
   deinit {
-    layoutObserver = nil
+    
     
     // Capture variables and release them on main thread to avoid background thread release crash
     let viewToRelease = containerView

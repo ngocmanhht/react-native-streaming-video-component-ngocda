@@ -29,6 +29,20 @@ private class LayoutForcingFrameLayout(context: android.content.Context) : Frame
         )
         layout(left, top, right, bottom)
     }
+
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        super.onLayout(changed, left, top, right, bottom)
+        val w = right - left
+        val h = bottom - top
+        for (i in 0 until childCount) {
+            val child = getChildAt(i)
+            child.measure(
+                android.view.View.MeasureSpec.makeMeasureSpec(w, android.view.View.MeasureSpec.EXACTLY),
+                android.view.View.MeasureSpec.makeMeasureSpec(h, android.view.View.MeasureSpec.EXACTLY)
+            )
+            child.layout(0, 0, w, h)
+        }
+    }
 }
 
 class HybridVideoPlayerView(private val ctx: ReactContext)
