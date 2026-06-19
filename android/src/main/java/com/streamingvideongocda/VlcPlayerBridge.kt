@@ -23,13 +23,21 @@ import com.facebook.react.bridge.ReactContext
 
 class VlcPlayerBridge(private val context: Context) {
 
-    // LibVLC holds a native thread pool + decode context per instance.
-    // MEMORY LEAK: if not released, each new instance leaks ~30-80 MB of native memory.
-    // Strategy: create LibVLC once, reuse it across load() calls.
-    private val libVLC: LibVLC = LibVLC(context, arrayListOf(
-        "-vvv",                   // Enable native verbose debug logging (writes directly to logcat!)
-        "--rtsp-tcp",             // Force TCP for RTSP (more reliable over NAT/firewall)
-    ))
+    companion object {
+        @Volatile
+        private var libVLCInstance: LibVLC? = null
+
+        fun getLibVLC(context: Context): LibVLC {
+            return libVLCInstance ?: synchronized(this) {
+                libVLCInstance ?: LibVLC(context.applicationContext, arrayListOf(
+                    "-vvv",                   // Enable native verbose debug logging (writes directly to logcat!)
+                    "--rtsp-tcp",             // Force TCP for RTSP (more reliable over NAT/firewall)
+                )).also { libVLCInstance = it }
+            }
+        }
+    }
+
+    private val libVLC: LibVLC = getLibVLC(context)
 
     // Single MediaPlayer instance, reused across load() calls
     private val player = MediaPlayer(libVLC)
@@ -338,8 +346,7 @@ class VlcPlayerBridge(private val context: Context) {
             currentMedia?.release()
             currentMedia = null
         } catch (_: Exception) {}
-        try {
-            libVLC.release()
-        } catch (_: Exception) {}
+        // Since libVLC is a global singleton, we do not release it here
+        // (individual players releasing LibVLC would break other active players).
     }
 }

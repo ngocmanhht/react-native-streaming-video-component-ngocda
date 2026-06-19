@@ -23,6 +23,7 @@ class ExoPlayerBridge(private val context: Context) {
     private var resizeMode: ResizeMode = ResizeMode.CONTAIN
     private var currentVolume: Float = 1f
     private var isMuted: Boolean = false
+    var isLive: Boolean = false
 
     init {
         textureView.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
@@ -52,46 +53,73 @@ class ExoPlayerBridge(private val context: Context) {
 
     var progressIntervalMs: Long = 500L
 
-    fun load(url: String) {
-        // Full release before reload to prevent native decoder leak
-        release()
-        player = ExoPlayer.Builder(context).build().also { exo ->
-            exo.setVideoTextureView(textureView)
-            exo.repeatMode = if (shouldRepeat) Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_OFF
-            exo.addListener(object : Player.Listener {
-                override fun onPlaybackStateChanged(state: Int) {
-                    when (state) {
-                        Player.STATE_READY -> {
-                            onBuffering?.invoke(false)
-                            onReady?.invoke(exo.duration)
-                            // Start progress reporting only after ready
-                            textureView.removeCallbacks(progressRunnable)
-                            textureView.post(progressRunnable)
+    private fun ensurePlayerCreated(): ExoPlayer {
+        var p = player
+        if (p == null) {
+            p = ExoPlayer.Builder(context).build().apply {
+                setVideoTextureView(textureView)
+                repeatMode = if (shouldRepeat) Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_OFF
+                addListener(object : Player.Listener {
+                    override fun onPlaybackStateChanged(state: Int) {
+                        val currentExo = player ?: return
+                        when (state) {
+                            Player.STATE_READY -> {
+                                onBuffering?.invoke(false)
+                                onReady?.invoke(currentExo.duration)
+                                // Start progress reporting only after ready
+                                textureView.removeCallbacks(progressRunnable)
+                                textureView.post(progressRunnable)
+                            }
+                            Player.STATE_BUFFERING -> onBuffering?.invoke(true)
+                            Player.STATE_ENDED     -> {
+                                textureView.removeCallbacks(progressRunnable)
+                                onEnd?.invoke()
+                            }
+                            else -> {}
                         }
-                        Player.STATE_BUFFERING -> onBuffering?.invoke(true)
-                        Player.STATE_ENDED     -> {
-                            textureView.removeCallbacks(progressRunnable)
-                            onEnd?.invoke()
-                        }
-                        else -> {}
                     }
-                }
-                override fun onVideoSizeChanged(videoSize: VideoSize) {
-                    videoWidth = videoSize.width
-                    videoHeight = videoSize.height
-                    applyScale()
-                }
-                override fun onPlayerError(error: PlaybackException) {
-                    textureView.removeCallbacks(progressRunnable)
-                    onError?.invoke(error.errorCode, error.localizedMessage ?: "ExoPlayer error")
-                }
-            })
-            exo.setMediaItem(MediaItem.fromUri(url))
-            exo.volume = if (isMuted) 0f else currentVolume
-            exo.prepare()
-            // NOTE: Do NOT call play() here – caller (HybridVideoPlayerView) handles it
-            // after onReady fires to avoid async race condition
+                    override fun onVideoSizeChanged(videoSize: VideoSize) {
+                        videoWidth = videoSize.width
+                        videoHeight = videoSize.height
+                        applyScale()
+                    }
+                    override fun onPlayerError(error: PlaybackException) {
+                        textureView.removeCallbacks(progressRunnable)
+                        onError?.invoke(error.errorCode, error.localizedMessage ?: "ExoPlayer error")
+                    }
+                })
+            }
+            player = p
         }
+        return p
+    }
+
+    fun load(url: String) {
+        val p = ensurePlayerCreated()
+        p.stop()
+        p.clearMediaItems()
+
+        val mediaItem = if (isLive) {
+            MediaItem.Builder()
+                .setUri(url)
+                .setLiveConfiguration(
+                    MediaItem.LiveConfiguration.Builder()
+                        .setTargetOffsetMs(1000) // 1 second target offset for low latency
+                        .build()
+                )
+                .build()
+        } else {
+            MediaItem.fromUri(url)
+        }
+
+        p.setMediaItem(mediaItem)
+        p.repeatMode = if (shouldRepeat) Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_OFF
+        p.volume = if (isMuted) 0f else currentVolume
+        p.prepare()
+        
+        // Reset progress reporting callback on main thread
+        textureView.removeCallbacks(progressRunnable)
+        textureView.post(progressRunnable)
     }
 
     fun play()  { player?.play() }

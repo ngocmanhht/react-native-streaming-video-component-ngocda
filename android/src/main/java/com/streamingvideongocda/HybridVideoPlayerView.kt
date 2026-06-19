@@ -189,6 +189,7 @@ class HybridVideoPlayerView(private val ctx: ReactContext)
             )
         )
         rootLayout.requestLayout()
+        exo.isLive = isLive
         exo.load(url)
         exo.setResizeMode(resizeMode)
         if (!paused) {
