@@ -100,7 +100,9 @@ class VlcPlayerBridge(private val context: Context) {
         try {
             player.detachViews()
         } catch (_: Exception) {}
-        player.attachViews(vlcVideoLayout, null, true, true)
+        // Use native SurfaceView (useTextureView = false) for hardware ANativeWindow direct binding.
+        // TextureView (true) often fails with 'failed to create video output' in dynamic Fabric view trees.
+        player.attachViews(vlcVideoLayout, null, false, false)
     }
 
     fun load(url: String) {

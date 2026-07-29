@@ -22,6 +22,8 @@ final class VLCPlayerBridge: NSObject, VLCMediaPlayerDelegate {
 
   func attach(to view: UIView) {
     containerView = view
+    view.setNeedsLayout()
+    view.layoutIfNeeded()
     player.drawable = view
   }
 

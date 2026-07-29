@@ -234,6 +234,8 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
 
   private func loadVlc() {
     avBridge?.stop()
+    containerView.setNeedsLayout()
+    containerView.layoutIfNeeded()
     vlcBridge?.attach(to: containerView)
     vlcBridge?.load(url: url)
     if !paused { vlcBridge?.play() }
