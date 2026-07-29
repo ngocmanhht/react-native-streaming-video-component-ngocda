@@ -174,7 +174,7 @@ export default function App() {
 
 ## Verification
 
-Run your app and add a simple `<VideoPlayer>` with an HLS URL. You should see the video playing. If you see a black screen, check:
+Run your app and add a simple `<VideoPlayer>` with an HLS, RTSP, or RTMP URL. You should see the video playing. If you see a black screen, check:
 
 1. New Architecture is enabled (`newArchEnabled=true`)
 2. `pod install` was run after installing

@@ -20,6 +20,8 @@ namespace margelo::nitro::streamingvideo { enum class PlaybackState; }
 namespace margelo::nitro::streamingvideo { struct ProgressEvent; }
 // Forward declaration of `ReadyEvent` to properly resolve imports.
 namespace margelo::nitro::streamingvideo { struct ReadyEvent; }
+// Forward declaration of `StreamProtocol` to properly resolve imports.
+namespace margelo::nitro::streamingvideo { enum class StreamProtocol; }
 
 // Forward declarations of Swift defined types
 // Forward declaration of `HybridVideoPlayerViewSpec_cxx` to properly resolve imports.
@@ -32,6 +34,7 @@ namespace react_native_streaming_video_component_ngocda { class HybridVideoPlaye
 #include "PlaybackState.hpp"
 #include "ProgressEvent.hpp"
 #include "ReadyEvent.hpp"
+#include "StreamProtocol.hpp"
 #include <NitroModules/Promise.hpp>
 #include <NitroModules/PromiseHolder.hpp>
 #include <NitroModules/Result.hpp>
@@ -195,6 +198,21 @@ namespace margelo::nitro::streamingvideo::bridge::swift {
     return optional.value();
   }
   
+  // pragma MARK: std::optional<StreamProtocol>
+  /**
+   * Specialized version of `std::optional<StreamProtocol>`.
+   */
+  using std__optional_StreamProtocol_ = std::optional<StreamProtocol>;
+  inline std::optional<StreamProtocol> create_std__optional_StreamProtocol_(const StreamProtocol& value) noexcept {
+    return std::optional<StreamProtocol>(value);
+  }
+  inline bool has_value_std__optional_StreamProtocol_(const std::optional<StreamProtocol>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline StreamProtocol get_std__optional_StreamProtocol_(const std::optional<StreamProtocol>& optional) noexcept {
+    return optional.value();
+  }
+  
   // pragma MARK: std::optional<std::string>
   /**
    * Specialized version of `std::optional<std::string>`.
@@ -207,6 +225,21 @@ namespace margelo::nitro::streamingvideo::bridge::swift {
     return optional.has_value();
   }
   inline std::string get_std__optional_std__string_(const std::optional<std::string>& optional) noexcept {
+    return optional.value();
+  }
+  
+  // pragma MARK: std::optional<bool>
+  /**
+   * Specialized version of `std::optional<bool>`.
+   */
+  using std__optional_bool_ = std::optional<bool>;
+  inline std::optional<bool> create_std__optional_bool_(const bool& value) noexcept {
+    return std::optional<bool>(value);
+  }
+  inline bool has_value_std__optional_bool_(const std::optional<bool>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline bool get_std__optional_bool_(const std::optional<bool>& optional) noexcept {
     return optional.value();
   }
   

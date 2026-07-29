@@ -48,6 +48,9 @@ namespace margelo::nitro::streamingvideo {
         case StreamProtocol::RTSP:
           static const auto fieldRTSP = clazz->getStaticField<JStreamProtocol>("RTSP");
           return clazz->getStaticFieldValue(fieldRTSP);
+        case StreamProtocol::RTMP:
+          static const auto fieldRTMP = clazz->getStaticField<JStreamProtocol>("RTMP");
+          return clazz->getStaticFieldValue(fieldRTMP);
         case StreamProtocol::MP4:
           static const auto fieldMP4 = clazz->getStaticField<JStreamProtocol>("MP4");
           return clazz->getStaticFieldValue(fieldMP4);

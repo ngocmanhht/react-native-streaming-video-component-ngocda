@@ -15,7 +15,9 @@
 #include <NitroModules/JNICallable.hpp>
 #include "JErrorEvent.hpp"
 #include <string>
+#include "StreamProtocol.hpp"
 #include <optional>
+#include "JStreamProtocol.hpp"
 
 namespace margelo::nitro::streamingvideo {
 

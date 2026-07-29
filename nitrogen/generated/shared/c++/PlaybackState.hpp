@@ -35,8 +35,9 @@ namespace margelo::nitro::streamingvideo {
     PLAYING      SWIFT_NAME(playing) = 3,
     PAUSED      SWIFT_NAME(paused) = 4,
     BUFFERING      SWIFT_NAME(buffering) = 5,
-    ERROR      SWIFT_NAME(error) = 6,
-    ENDED      SWIFT_NAME(ended) = 7,
+    RECONNECTING      SWIFT_NAME(reconnecting) = 6,
+    ERROR      SWIFT_NAME(error) = 7,
+    ENDED      SWIFT_NAME(ended) = 8,
   } CLOSED_ENUM;
 
 } // namespace margelo::nitro::streamingvideo
@@ -55,6 +56,7 @@ namespace margelo::nitro {
         case hashString("playing"): return margelo::nitro::streamingvideo::PlaybackState::PLAYING;
         case hashString("paused"): return margelo::nitro::streamingvideo::PlaybackState::PAUSED;
         case hashString("buffering"): return margelo::nitro::streamingvideo::PlaybackState::BUFFERING;
+        case hashString("reconnecting"): return margelo::nitro::streamingvideo::PlaybackState::RECONNECTING;
         case hashString("error"): return margelo::nitro::streamingvideo::PlaybackState::ERROR;
         case hashString("ended"): return margelo::nitro::streamingvideo::PlaybackState::ENDED;
         default: [[unlikely]]
@@ -69,6 +71,7 @@ namespace margelo::nitro {
         case margelo::nitro::streamingvideo::PlaybackState::PLAYING: return JSIConverter<std::string>::toJSI(runtime, "playing");
         case margelo::nitro::streamingvideo::PlaybackState::PAUSED: return JSIConverter<std::string>::toJSI(runtime, "paused");
         case margelo::nitro::streamingvideo::PlaybackState::BUFFERING: return JSIConverter<std::string>::toJSI(runtime, "buffering");
+        case margelo::nitro::streamingvideo::PlaybackState::RECONNECTING: return JSIConverter<std::string>::toJSI(runtime, "reconnecting");
         case margelo::nitro::streamingvideo::PlaybackState::ERROR: return JSIConverter<std::string>::toJSI(runtime, "error");
         case margelo::nitro::streamingvideo::PlaybackState::ENDED: return JSIConverter<std::string>::toJSI(runtime, "ended");
         default: [[unlikely]]
@@ -88,6 +91,7 @@ namespace margelo::nitro {
         case hashString("playing"):
         case hashString("paused"):
         case hashString("buffering"):
+        case hashString("reconnecting"):
         case hashString("error"):
         case hashString("ended"):
           return true;

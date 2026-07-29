@@ -78,11 +78,24 @@ class HybridVideoPlayerView(private val ctx: ReactContext)
 
     // ── Props ────────────────────────────────────────────────────────────────
 
+    // Exponential backoff reconnect
+    private var retryCount = 0
+    private val maxRetries = 5
+    private val reconnectHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val reconnectRunnable = Runnable {
+        if (!paused && !url.isEmpty()) {
+            onStateChange?.invoke(PlaybackState.RECONNECTING)
+            reloadPlayer()
+        }
+    }
+
     override var url: String = ""
         set(value) {
-            Log.d("StreamingVideo", "setUrl: $value")
+            Log.d("StreamingVideo", "setUrl: ${SecurityUtils.sanitizeUrl(value)}")
             if (value == field || value.isEmpty()) return
             field = value
+            retryCount = 0
+            reconnectHandler.removeCallbacks(reconnectRunnable)
             reloadPlayer()
         }
 
@@ -91,6 +104,8 @@ class HybridVideoPlayerView(private val ctx: ReactContext)
             Log.d("StreamingVideo", "setStreamProtocol: $value")
             if (value == field) return
             field = value
+            retryCount = 0
+            reconnectHandler.removeCallbacks(reconnectRunnable)
             reloadPlayer()
         }
 
@@ -98,7 +113,12 @@ class HybridVideoPlayerView(private val ctx: ReactContext)
         set(value) {
             if (value == field) return
             field = value
-            if (value) activePause() else activePlay()
+            if (value) {
+                reconnectHandler.removeCallbacks(reconnectRunnable)
+                activePause()
+            } else {
+                activePlay()
+            }
         }
 
     override var volume: Double = 1.0
@@ -153,27 +173,41 @@ class HybridVideoPlayerView(private val ctx: ReactContext)
         val lowerUrl = url.lowercase()
         if (lowerUrl.startsWith("rtsp://")) {
             detectedProtocol = StreamProtocol.RTSP
+        } else if (lowerUrl.startsWith("rtmp://") || lowerUrl.startsWith("rtmps://")) {
+            detectedProtocol = StreamProtocol.RTMP
         } else if (lowerUrl.contains(".m3u8")) {
             detectedProtocol = StreamProtocol.HLS
         } else if (lowerUrl.contains(".mp4")) {
             detectedProtocol = StreamProtocol.MP4
         }
         
-        Log.d("StreamingVideo", "reloadPlayer: url=$url, requested=$streamProtocol, detected=$detectedProtocol")
+        Log.d("StreamingVideo", "reloadPlayer: url=${SecurityUtils.sanitizeUrl(url)}, requested=$streamProtocol, detected=$detectedProtocol")
         activeProtocol = detectedProtocol
         useVlcFallback = false
         onStateChange?.invoke(PlaybackState.LOADING)
 
         when (activeProtocol) {
             StreamProtocol.HLS, StreamProtocol.MP4 -> loadExo()
-            // For RTSP: skip ExoPlayer entirely on Android because Media3 RTSP digest auth is broken.
-            // Go straight to VLC to play in under 500ms instead of waiting for 8.5 seconds timeout!
-            StreamProtocol.RTSP -> {
-                Log.d("StreamingVideo", "reloadPlayer: RTSP detected, skipping ExoPlayer and loading VLC directly")
+            StreamProtocol.RTSP, StreamProtocol.RTMP -> {
+                Log.d("StreamingVideo", "reloadPlayer: Live stream ($activeProtocol) detected, loading VLC directly")
                 useVlcFallback = true
                 loadVlc()
             }
         }
+    }
+
+    private fun scheduleReconnect() {
+        if (paused || retryCount >= maxRetries) {
+            Log.e("StreamingVideo", "Max reconnect retries ($maxRetries) reached or player is paused.")
+            onStateChange?.invoke(PlaybackState.ERROR)
+            return
+        }
+        retryCount++
+        val delayMs = (1000L * (1 shl (retryCount - 1))).coerceAtMost(10000L) // 1s, 2s, 4s, 8s, 10s
+        Log.d("StreamingVideo", "Scheduling reconnect retry #$retryCount in ${delayMs}ms")
+        onStateChange?.invoke(PlaybackState.RECONNECTING)
+        reconnectHandler.removeCallbacks(reconnectRunnable)
+        reconnectHandler.postDelayed(reconnectRunnable, delayMs)
     }
 
     private fun loadExo() {
@@ -329,7 +363,11 @@ class HybridVideoPlayerView(private val ctx: ReactContext)
         exo.onBuffering = { b ->
             Log.d("StreamingVideo", "ExoPlayer onBuffering: $b")
             onBuffering?.invoke(b)
-            onStateChange?.invoke(if (b) PlaybackState.BUFFERING else PlaybackState.PLAYING)
+            if (b) {
+                onStateChange?.invoke(PlaybackState.BUFFERING)
+            } else {
+                onStateChange?.invoke(if (paused) PlaybackState.PAUSED else PlaybackState.PLAYING)
+            }
         }
         exo.onEnd = {
             Log.d("StreamingVideo", "ExoPlayer onEnd")
@@ -369,7 +407,11 @@ class HybridVideoPlayerView(private val ctx: ReactContext)
         vlc.onBuffering = { b ->
             Log.d("StreamingVideo", "VlcPlayer onBuffering: $b")
             onBuffering?.invoke(b)
-            onStateChange?.invoke(if (b) PlaybackState.BUFFERING else PlaybackState.PLAYING)
+            if (b) {
+                onStateChange?.invoke(PlaybackState.BUFFERING)
+            } else {
+                onStateChange?.invoke(if (paused) PlaybackState.PAUSED else PlaybackState.PLAYING)
+            }
         }
         vlc.onEnd = {
             Log.d("StreamingVideo", "VlcPlayer onEnd")
@@ -386,8 +428,12 @@ class HybridVideoPlayerView(private val ctx: ReactContext)
         }
         vlc.onError = { _, msg ->
             Log.e("StreamingVideo", "VlcPlayer onError: msg=$msg")
-            onError?.invoke(ErrorEvent(-1.0, msg, null))
-            onStateChange?.invoke(PlaybackState.ERROR)
+            onError?.invoke(ErrorEvent(-1.0, msg, activeProtocol, null, true))
+            if (activeProtocol == StreamProtocol.RTSP || activeProtocol == StreamProtocol.RTMP) {
+                scheduleReconnect()
+            } else {
+                onStateChange?.invoke(PlaybackState.ERROR)
+            }
         }
     }
 
@@ -395,6 +441,7 @@ class HybridVideoPlayerView(private val ctx: ReactContext)
 
     override fun onDropView() {
         super.onDropView()
+        reconnectHandler.removeCallbacks(reconnectRunnable)
         // Release in correct order to prevent JNI crash:
         // 1. Stop playback first
         // 2. Release ExoPlayer (releases codec + surface)

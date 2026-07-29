@@ -18,10 +18,22 @@ public extension ErrorEvent {
   /**
    * Create a new instance of `ErrorEvent`.
    */
-  init(code: Double, message: String, nativeError: String?) {
-    self.init(code, std.string(message), { () -> bridge.std__optional_std__string_ in
+  init(code: Double, message: String, protocol: StreamProtocol?, nativeError: String?, recoverable: Bool?) {
+    self.init(code, std.string(message), { () -> bridge.std__optional_StreamProtocol_ in
+      if let __unwrappedValue = protocol {
+        return bridge.create_std__optional_StreamProtocol_(__unwrappedValue)
+      } else {
+        return .init()
+      }
+    }(), { () -> bridge.std__optional_std__string_ in
       if let __unwrappedValue = nativeError {
         return bridge.create_std__optional_std__string_(std.string(__unwrappedValue))
+      } else {
+        return .init()
+      }
+    }(), { () -> bridge.std__optional_bool_ in
+      if let __unwrappedValue = recoverable {
+        return bridge.create_std__optional_bool_(__unwrappedValue)
       } else {
         return .init()
       }
@@ -39,11 +51,28 @@ public extension ErrorEvent {
   }
   
   @inline(__always)
+  var protocol: StreamProtocol? {
+    return self.__protocol.value
+  }
+  
+  @inline(__always)
   var nativeError: String? {
     return { () -> String? in
       if bridge.has_value_std__optional_std__string_(self.__nativeError) {
         let __unwrapped = bridge.get_std__optional_std__string_(self.__nativeError)
         return String(__unwrapped)
+      } else {
+        return nil
+      }
+    }()
+  }
+  
+  @inline(__always)
+  var recoverable: Bool? {
+    return { () -> Bool? in
+      if bridge.has_value_std__optional_bool_(self.__recoverable) {
+        let __unwrapped = bridge.get_std__optional_bool_(self.__recoverable)
+        return __unwrapped
       } else {
         return nil
       }

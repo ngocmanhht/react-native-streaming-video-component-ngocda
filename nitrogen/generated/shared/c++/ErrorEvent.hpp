@@ -28,9 +28,11 @@
 #error NitroModules cannot be found! Are you sure you installed NitroModules properly?
 #endif
 
-
+// Forward declaration of `StreamProtocol` to properly resolve imports.
+namespace margelo::nitro::streamingvideo { enum class StreamProtocol; }
 
 #include <string>
+#include "StreamProtocol.hpp"
 #include <optional>
 
 namespace margelo::nitro::streamingvideo {
@@ -42,11 +44,13 @@ namespace margelo::nitro::streamingvideo {
   public:
     double code     SWIFT_PRIVATE;
     std::string message     SWIFT_PRIVATE;
+    std::optional<StreamProtocol> protocol     SWIFT_PRIVATE;
     std::optional<std::string> nativeError     SWIFT_PRIVATE;
+    std::optional<bool> recoverable     SWIFT_PRIVATE;
 
   public:
     ErrorEvent() = default;
-    explicit ErrorEvent(double code, std::string message, std::optional<std::string> nativeError): code(code), message(message), nativeError(nativeError) {}
+    explicit ErrorEvent(double code, std::string message, std::optional<StreamProtocol> protocol, std::optional<std::string> nativeError, std::optional<bool> recoverable): code(code), message(message), protocol(protocol), nativeError(nativeError), recoverable(recoverable) {}
 
   public:
     friend bool operator==(const ErrorEvent& lhs, const ErrorEvent& rhs) = default;
@@ -64,14 +68,18 @@ namespace margelo::nitro {
       return margelo::nitro::streamingvideo::ErrorEvent(
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "code"))),
         JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "message"))),
-        JSIConverter<std::optional<std::string>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "nativeError")))
+        JSIConverter<std::optional<margelo::nitro::streamingvideo::StreamProtocol>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "protocol"))),
+        JSIConverter<std::optional<std::string>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "nativeError"))),
+        JSIConverter<std::optional<bool>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "recoverable")))
       );
     }
     static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::streamingvideo::ErrorEvent& arg) {
       jsi::Object obj(runtime);
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "code"), JSIConverter<double>::toJSI(runtime, arg.code));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "message"), JSIConverter<std::string>::toJSI(runtime, arg.message));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "protocol"), JSIConverter<std::optional<margelo::nitro::streamingvideo::StreamProtocol>>::toJSI(runtime, arg.protocol));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "nativeError"), JSIConverter<std::optional<std::string>>::toJSI(runtime, arg.nativeError));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "recoverable"), JSIConverter<std::optional<bool>>::toJSI(runtime, arg.recoverable));
       return obj;
     }
     static inline bool canConvert(jsi::Runtime& runtime, const jsi::Value& value) {
@@ -84,7 +92,9 @@ namespace margelo::nitro {
       }
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "code")))) return false;
       if (!JSIConverter<std::string>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "message")))) return false;
+      if (!JSIConverter<std::optional<margelo::nitro::streamingvideo::StreamProtocol>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "protocol")))) return false;
       if (!JSIConverter<std::optional<std::string>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "nativeError")))) return false;
+      if (!JSIConverter<std::optional<bool>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "recoverable")))) return false;
       return true;
     }
   };

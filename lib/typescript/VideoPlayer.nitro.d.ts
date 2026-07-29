@@ -1,7 +1,7 @@
 import type { HybridView, HybridViewProps, HybridViewMethods } from 'react-native-nitro-modules';
-export type StreamProtocol = 'hls' | 'rtsp' | 'mp4';
+export type StreamProtocol = 'hls' | 'rtsp' | 'rtmp' | 'mp4';
 export type ResizeMode = 'contain' | 'cover' | 'fill';
-export type PlaybackState = 'idle' | 'loading' | 'ready' | 'playing' | 'paused' | 'buffering' | 'error' | 'ended';
+export type PlaybackState = 'idle' | 'loading' | 'ready' | 'playing' | 'paused' | 'buffering' | 'reconnecting' | 'error' | 'ended';
 export interface NaturalSize {
     width: number;
     height: number;
@@ -14,7 +14,9 @@ export interface ProgressEvent {
 export interface ErrorEvent {
     code: number;
     message: string;
+    protocol?: StreamProtocol;
     nativeError?: string;
+    recoverable?: boolean;
 }
 export interface ReadyEvent {
     duration: number;

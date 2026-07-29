@@ -29,6 +29,8 @@ public extension PlaybackState {
         self = .paused
       case "buffering":
         self = .buffering
+      case "reconnecting":
+        self = .reconnecting
       case "error":
         self = .error
       case "ended":
@@ -55,6 +57,8 @@ public extension PlaybackState {
         return "paused"
       case .buffering:
         return "buffering"
+      case .reconnecting:
+        return "reconnecting"
       case .error:
         return "error"
       case .ended:

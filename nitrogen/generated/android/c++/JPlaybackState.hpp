@@ -60,6 +60,9 @@ namespace margelo::nitro::streamingvideo {
         case PlaybackState::BUFFERING:
           static const auto fieldBUFFERING = clazz->getStaticField<JPlaybackState>("BUFFERING");
           return clazz->getStaticFieldValue(fieldBUFFERING);
+        case PlaybackState::RECONNECTING:
+          static const auto fieldRECONNECTING = clazz->getStaticField<JPlaybackState>("RECONNECTING");
+          return clazz->getStaticFieldValue(fieldRECONNECTING);
         case PlaybackState::ERROR:
           static const auto fieldERROR = clazz->getStaticField<JPlaybackState>("ERROR");
           return clazz->getStaticFieldValue(fieldERROR);

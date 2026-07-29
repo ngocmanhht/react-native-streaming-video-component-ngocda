@@ -257,55 +257,6 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
   const zoomScale = useSharedValue(1)
   const savedZoomScale = useSharedValue(1)
 
-  const renderContent = () => {
-    const playerEl = (
-      <NativeVideoPlayer
-        key={streamProtocol}
-        hybridRef={callback(handleHybridRef)}
-        streamProtocol={streamProtocol}
-        paused={state.paused}
-        volume={state.isMuted ? 0 : state.volume}
-        muted={state.isMuted}
-        zoomEnabled={zoomEnabled && isFullscreen}
-        isLive={isLive}
-        onStateChange={callback(handleStateChange)}
-        onProgress={callback(handleProgress)}
-        onBuffering={callback(handleBuffering)}
-        onError={callback(handleError)}
-        onEnd={callback(handleEnd)}
-        onReady={callback(handleReady)}
-        {...(nativeProps as any)}
-        style={{
-          width: '100%',
-          height: '100%',
-        }}
-      />
-    )
-
-    const controlsEl = renderControls(streamProtocol)
-
-    return (
-      <View style={StyleSheet.absoluteFill}>
-        <ZoomableView
-          zoomEnabled={zoomEnabled && isFullscreen}
-          style={StyleSheet.absoluteFill}
-          scale={zoomScale}
-          savedScale={savedZoomScale}
-          player={playerEl}
-          controls={controlsEl}
-          onZoomChange={zoom => {
-            setCurrentZoom(zoom)
-            setShowZoomBadge(true)
-            if (zoomTimeoutRef.current) clearTimeout(zoomTimeoutRef.current)
-            zoomTimeoutRef.current = setTimeout(() => {
-              setShowZoomBadge(false)
-            }, 2000)
-          }}
-        />
-      </View>
-    )
-  }
-
   const renderControls = (protocol: StreamProtocol) =>
     showControls ? (
       <VideoControls
@@ -333,34 +284,58 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
       />
     ) : null
 
-  if (!isFullscreen) {
-    return <View style={[styles.container, style]}>{renderContent()}</View>
-  }
+  const playerEl = (
+    <NativeVideoPlayer
+      key={streamProtocol}
+      hybridRef={callback(handleHybridRef)}
+      streamProtocol={streamProtocol}
+      paused={state.paused}
+      volume={state.isMuted ? 0 : state.volume}
+      muted={state.isMuted}
+      zoomEnabled={zoomEnabled && isFullscreen}
+      isLive={isLive}
+      onStateChange={callback(handleStateChange)}
+      onProgress={callback(handleProgress)}
+      onBuffering={callback(handleBuffering)}
+      onError={callback(handleError)}
+      onEnd={callback(handleEnd)}
+      onReady={callback(handleReady)}
+      {...(nativeProps as any)}
+      style={styles.playerNativeStyle}
+    />
+  )
+
+  const controlsEl = renderControls(streamProtocol)
+
+  const containerStyle = isFullscreen ? styles.fullscreenContainer : [styles.container, style]
 
   return (
-    <>
-      <View style={[styles.container, style]} pointerEvents="none" />
-      <Modal
-        key={`${isFullscreen}-${streamProtocol}`}
-        visible={isFullscreen}
-        transparent={false}
-        animationType="fade"
-        statusBarTranslucent={true}
-        supportedOrientations={['landscape-left', 'landscape-right', 'portrait']}
-        onRequestClose={toggleFullscreen}>
-        <GestureHandlerRootView style={{ flex: 1 }}>
-          <StatusBar hidden />
-          <View style={styles.fullscreenContainer}>
-            {readyFullscreen ? renderContent() : null}
-            {showZoomBadge && currentZoom > 1.05 && (
-              <View style={styles.zoomBadge}>
-                <Text style={styles.zoomBadgeText}>{currentZoom.toFixed(1)}x</Text>
-              </View>
-            )}
-          </View>
-        </GestureHandlerRootView>
-      </Modal>
-    </>
+    <GestureHandlerRootView style={containerStyle}>
+      <StatusBar hidden={isFullscreen} animated />
+      <View style={StyleSheet.absoluteFill}>
+        <ZoomableView
+          zoomEnabled={zoomEnabled && isFullscreen}
+          style={StyleSheet.absoluteFill}
+          scale={zoomScale}
+          savedScale={savedZoomScale}
+          player={playerEl}
+          controls={controlsEl}
+          onZoomChange={zoom => {
+            setCurrentZoom(zoom)
+            setShowZoomBadge(true)
+            if (zoomTimeoutRef.current) clearTimeout(zoomTimeoutRef.current)
+            zoomTimeoutRef.current = setTimeout(() => {
+              setShowZoomBadge(false)
+            }, 2000)
+          }}
+        />
+      </View>
+      {isFullscreen && showZoomBadge && currentZoom > 1.05 && (
+        <View style={styles.zoomBadge}>
+          <Text style={styles.zoomBadgeText}>{currentZoom.toFixed(1)}x</Text>
+        </View>
+      )}
+    </GestureHandlerRootView>
   )
 }
 
@@ -486,6 +461,11 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 0,
     top: 0,
+    zIndex: 99999,
+  },
+  playerNativeStyle: {
+    height: '100%',
+    width: '100%',
   },
   zoomBadge: {
     backgroundColor: 'rgba(0,0,0,0.6)',

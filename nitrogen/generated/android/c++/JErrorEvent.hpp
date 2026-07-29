@@ -10,6 +10,8 @@
 #include <fbjni/fbjni.h>
 #include "ErrorEvent.hpp"
 
+#include "JStreamProtocol.hpp"
+#include "StreamProtocol.hpp"
 #include <optional>
 #include <string>
 
@@ -36,12 +38,18 @@ namespace margelo::nitro::streamingvideo {
       double code = this->getFieldValue(fieldCode);
       static const auto fieldMessage = clazz->getField<jni::JString>("message");
       jni::local_ref<jni::JString> message = this->getFieldValue(fieldMessage);
+      static const auto fieldProtocol = clazz->getField<JStreamProtocol>("protocol");
+      jni::local_ref<JStreamProtocol> protocol = this->getFieldValue(fieldProtocol);
       static const auto fieldNativeError = clazz->getField<jni::JString>("nativeError");
       jni::local_ref<jni::JString> nativeError = this->getFieldValue(fieldNativeError);
+      static const auto fieldRecoverable = clazz->getField<jni::JBoolean>("recoverable");
+      jni::local_ref<jni::JBoolean> recoverable = this->getFieldValue(fieldRecoverable);
       return ErrorEvent(
         code,
         message->toStdString(),
-        nativeError != nullptr ? std::make_optional(nativeError->toStdString()) : std::nullopt
+        protocol != nullptr ? std::make_optional(protocol->toCpp()) : std::nullopt,
+        nativeError != nullptr ? std::make_optional(nativeError->toStdString()) : std::nullopt,
+        recoverable != nullptr ? std::make_optional(static_cast<bool>(recoverable->value())) : std::nullopt
       );
     }
 
@@ -51,14 +59,16 @@ namespace margelo::nitro::streamingvideo {
      */
     [[maybe_unused]]
     static jni::local_ref<JErrorEvent::javaobject> fromCpp(const ErrorEvent& value) {
-      using JSignature = JErrorEvent(double, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>);
+      using JSignature = JErrorEvent(double, jni::alias_ref<jni::JString>, jni::alias_ref<JStreamProtocol>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JBoolean>);
       static const auto clazz = javaClassStatic();
       static const auto create = clazz->getStaticMethod<JSignature>("fromCpp");
       return create(
         clazz,
         value.code,
         jni::make_jstring(value.message),
-        value.nativeError.has_value() ? jni::make_jstring(value.nativeError.value()) : nullptr
+        value.protocol.has_value() ? JStreamProtocol::fromCpp(value.protocol.value()) : nullptr,
+        value.nativeError.has_value() ? jni::make_jstring(value.nativeError.value()) : nullptr,
+        value.recoverable.has_value() ? jni::JBoolean::valueOf(value.recoverable.value()) : nullptr
       );
     }
   };

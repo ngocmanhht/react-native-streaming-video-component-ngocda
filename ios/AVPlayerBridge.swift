@@ -268,7 +268,25 @@ final class AVPlayerBridge: NSObject {
     }
   }
 
+  private func pruneSnapshotCache() {
+    let tmp = FileManager.default.temporaryDirectory
+    guard let files = try? FileManager.default.contentsOfDirectory(at: tmp, includingPropertiesForKeys: [.fileSizeKey], options: []) else { return }
+    let snapshots = files.filter { $0.lastPathComponent.hasPrefix("snapshot_") }
+    var totalSize: UInt64 = 0
+    let maxSizeBytes: UInt64 = 52_428_800 // 50MB
+    for file in snapshots {
+      if let attrs = try? FileManager.default.attributesOfItem(atPath: file.path),
+         let size = attrs[.size] as? UInt64 {
+        totalSize += size
+        if totalSize > maxSizeBytes {
+          try? FileManager.default.removeItem(at: file)
+        }
+      }
+    }
+  }
+
   private func saveImage(_ image: UIImage) -> String? {
+    pruneSnapshotCache()
     guard let data = image.jpegData(compressionQuality: 0.8) else { return nil }
     let filename = "snapshot_\(Int(Date().timeIntervalSince1970)).jpg"
     let path = FileManager.default.temporaryDirectory.appendingPathComponent(filename)

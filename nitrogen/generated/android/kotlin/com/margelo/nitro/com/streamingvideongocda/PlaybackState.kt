@@ -22,8 +22,9 @@ enum class PlaybackState(@DoNotStrip @Keep val value: Int) {
   PLAYING(3),
   PAUSED(4),
   BUFFERING(5),
-  ERROR(6),
-  ENDED(7);
+  RECONNECTING(6),
+  ERROR(7),
+  ENDED(8);
 
   companion object
 }

@@ -21,6 +21,8 @@ public extension StreamProtocol {
         self = .hls
       case "rtsp":
         self = .rtsp
+      case "rtmp":
+        self = .rtmp
       case "mp4":
         self = .mp4
       default:
@@ -37,6 +39,8 @@ public extension StreamProtocol {
         return "hls"
       case .rtsp:
         return "rtsp"
+      case .rtmp:
+        return "rtmp"
       case .mp4:
         return "mp4"
     }

@@ -173,14 +173,17 @@ class ExoPlayerBridge(private val context: Context) {
     }
 
     private fun saveBitmap(bitmap: Bitmap): String? {
+        SecurityUtils.pruneSnapshotCache(context.cacheDir)
         val file = File(context.cacheDir, "snapshot_${System.currentTimeMillis()}.jpg")
         return try {
             val out = FileOutputStream(file)
             bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
             out.flush()
             out.close()
+            bitmap.recycle()
             file.absolutePath
         } catch (e: Exception) {
+            bitmap.recycle()
             null
         }
     }

@@ -18,7 +18,8 @@ import com.facebook.proguard.annotations.DoNotStrip
 enum class StreamProtocol(@DoNotStrip @Keep val value: Int) {
   HLS(0),
   RTSP(1),
-  MP4(2);
+  RTMP(2),
+  MP4(3);
 
   companion object
 }

@@ -2,7 +2,7 @@ import type { HybridView, HybridViewProps, HybridViewMethods } from 'react-nativ
 
 // ── Enums ──────────────────────────────────────────────────────────────────
 
-export type StreamProtocol = 'hls' | 'rtsp' | 'mp4'
+export type StreamProtocol = 'hls' | 'rtsp' | 'rtmp' | 'mp4'
 
 export type ResizeMode = 'contain' | 'cover' | 'fill'
 
@@ -13,6 +13,7 @@ export type PlaybackState =
   | 'playing'
   | 'paused'
   | 'buffering'
+  | 'reconnecting'
   | 'error'
   | 'ended'
 
@@ -32,7 +33,9 @@ export interface ProgressEvent {
 export interface ErrorEvent {
   code: number
   message: string
+  protocol?: StreamProtocol
   nativeError?: string
+  recoverable?: boolean
 }
 
 export interface ReadyEvent {

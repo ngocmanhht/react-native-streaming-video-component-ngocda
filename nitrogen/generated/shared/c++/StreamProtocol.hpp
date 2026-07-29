@@ -31,7 +31,8 @@ namespace margelo::nitro::streamingvideo {
   enum class StreamProtocol {
     HLS      SWIFT_NAME(hls) = 0,
     RTSP      SWIFT_NAME(rtsp) = 1,
-    MP4      SWIFT_NAME(mp4) = 2,
+    RTMP      SWIFT_NAME(rtmp) = 2,
+    MP4      SWIFT_NAME(mp4) = 3,
   } CLOSED_ENUM;
 
 } // namespace margelo::nitro::streamingvideo
@@ -46,6 +47,7 @@ namespace margelo::nitro {
       switch (hashString(unionValue.c_str(), unionValue.size())) {
         case hashString("hls"): return margelo::nitro::streamingvideo::StreamProtocol::HLS;
         case hashString("rtsp"): return margelo::nitro::streamingvideo::StreamProtocol::RTSP;
+        case hashString("rtmp"): return margelo::nitro::streamingvideo::StreamProtocol::RTMP;
         case hashString("mp4"): return margelo::nitro::streamingvideo::StreamProtocol::MP4;
         default: [[unlikely]]
           throw std::invalid_argument("Cannot convert \"" + unionValue + "\" to enum StreamProtocol - invalid value!");
@@ -55,6 +57,7 @@ namespace margelo::nitro {
       switch (arg) {
         case margelo::nitro::streamingvideo::StreamProtocol::HLS: return JSIConverter<std::string>::toJSI(runtime, "hls");
         case margelo::nitro::streamingvideo::StreamProtocol::RTSP: return JSIConverter<std::string>::toJSI(runtime, "rtsp");
+        case margelo::nitro::streamingvideo::StreamProtocol::RTMP: return JSIConverter<std::string>::toJSI(runtime, "rtmp");
         case margelo::nitro::streamingvideo::StreamProtocol::MP4: return JSIConverter<std::string>::toJSI(runtime, "mp4");
         default: [[unlikely]]
           throw std::invalid_argument("Cannot convert StreamProtocol to JS - invalid value: "
@@ -69,6 +72,7 @@ namespace margelo::nitro {
       switch (hashString(unionValue.c_str(), unionValue.size())) {
         case hashString("hls"):
         case hashString("rtsp"):
+        case hashString("rtmp"):
         case hashString("mp4"):
           return true;
         default:

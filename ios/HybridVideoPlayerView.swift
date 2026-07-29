@@ -162,26 +162,66 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
   var onError: ((_ event: ErrorEvent) -> Void)? = nil
   var onEnd: (() -> Void)? = nil
 
+  // MARK: - Helper Utilities
+
+  private func sanitizeUrl(_ rawUrl: String) -> String {
+    guard let regex = try? NSRegularExpression(pattern: "(://[^:]+:)[^@]+(@)", options: []) else { return rawUrl }
+    let range = NSRange(location: 0, length: rawUrl.utf16.count)
+    return regex.stringByReplacingMatches(in: rawUrl, options: [], range: range, withTemplate: "$1***$2")
+  }
+
+  // MARK: - Reconnect Logic
+
+  private var retryCount = 0
+  private let maxRetries = 5
+  private var reconnectWorkItem: DispatchWorkItem?
+
+  private func scheduleReconnect() {
+    guard !paused, retryCount < maxRetries else {
+      onStateChange?(.error)
+      return
+    }
+    retryCount += 1
+    let delay = min(Double(1 << (retryCount - 1)), 10.0) // 1s, 2s, 4s, 8s, 10s
+    onStateChange?(.reconnecting)
+
+    reconnectWorkItem?.cancel()
+    let workItem = DispatchWorkItem { [weak self] in
+      guard let self = self, !self.paused, !self.url.isEmpty else { return }
+      self.reloadPlayer()
+    }
+    reconnectWorkItem = workItem
+    DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+  }
+
   // MARK: - Player lifecycle
 
   /// True when RTSP stream was stopped (pause or error) and needs URL reload on next play.
-  /// Most IP cameras don't support RFC 2326 PAUSE, so pause = disconnect; play = reconnect.
   private var _rtspNeedsReconnect = false
 
   private func reloadPlayer() {
     guard !url.isEmpty else { return }
-    activeProtocol = streamProtocol
+    let lowerUrl = url.lowercased()
+    if lowerUrl.hasPrefix("rtsp://") {
+      activeProtocol = .rtsp
+    } else if lowerUrl.hasPrefix("rtmp://") || lowerUrl.hasPrefix("rtmps://") {
+      activeProtocol = .rtmp
+    } else if lowerUrl.contains(".m3u8") {
+      activeProtocol = .hls
+    } else if lowerUrl.contains(".mp4") {
+      activeProtocol = .mp4
+    } else {
+      activeProtocol = streamProtocol
+    }
+
     useVlcFallback = false
     onStateChange?(.loading)
 
     switch activeProtocol {
-    case .hls:
+    case .hls, .mp4:
       loadAVPlayer(isLiveStream: isLive)
 
-    case .mp4:
-      loadAVPlayer(isLiveStream: isLive)
-
-    case .rtsp:
+    case .rtsp, .rtmp:
       loadVlc()
     }
   }
@@ -200,6 +240,7 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
   }
 
   private func activePlay() {
+    reconnectWorkItem?.cancel()
     if useVlcFallback {
       vlcBridge?.play()
       return
@@ -208,10 +249,8 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
     case .hls, .mp4:
       avBridge?.play()
 
-    case .rtsp:
+    case .rtsp, .rtmp:
       if _rtspNeedsReconnect {
-        // Most IP cameras disconnect on PAUSE (don't support RFC 2326 PAUSE).
-        // Reload the URL to reconnect the stream.
         _rtspNeedsReconnect = false
         vlcBridge?.load(url: url)
         vlcBridge?.play()
@@ -222,6 +261,7 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
   }
 
   private func activePause() {
+    reconnectWorkItem?.cancel()
     if useVlcFallback {
       vlcBridge?.pause()
       return
@@ -230,10 +270,7 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
     case .hls, .mp4:
       avBridge?.pause()
 
-    case .rtsp:
-      // Try VLC pause. If the server doesn't support PAUSE, VLC will fire
-      // .stopped state → onEnd callback → we set _rtspNeedsReconnect = true
-      // so the next play() call will reconnect.
+    case .rtsp, .rtmp:
       vlcBridge?.pause()
     }
   }
@@ -278,7 +315,7 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
                 userInfo: [NSLocalizedDescriptionKey: "AVPlayer seek failed"]))
             }
           }
-        case .rtsp:
+        case .rtsp, .rtmp:
           self.vlcBridge?.seek(to: positionSeconds) { success in
             if success {
               promise.resolve(withResult: ())
@@ -306,7 +343,7 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
       } else {
         switch self.activeProtocol {
         case .hls, .mp4: promise.resolve(withResult: self.avBridge?.currentTime ?? 0.0)
-        case .rtsp:       promise.resolve(withResult: self.vlcBridge?.currentTime ?? 0.0)
+        case .rtsp, .rtmp: promise.resolve(withResult: self.vlcBridge?.currentTime ?? 0.0)
         }
       }
     }
@@ -325,7 +362,7 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
       } else {
         switch self.activeProtocol {
         case .hls, .mp4: promise.resolve(withResult: self.avBridge?.duration ?? -1.0)
-        case .rtsp:       promise.resolve(withResult: self.vlcBridge?.duration ?? -1.0)
+        case .rtsp, .rtmp: promise.resolve(withResult: self.vlcBridge?.duration ?? -1.0)
         }
       }
     }
@@ -367,7 +404,7 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
               promise.reject(withError: NSError(domain: "StreamingVideo", code: 3, userInfo: [NSLocalizedDescriptionKey: "AVPlayer capture failed"]))
             }
           }
-        case .rtsp:
+        case .rtsp, .rtmp:
           self.vlcBridge?.takeScreenshot { path in
             if let path = path {
               promise.resolve(withResult: path)
@@ -391,15 +428,19 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
         naturalSize: .init(width: Double(size.width), height: Double(size.height))
       ))
       self.onStateChange?(.ready)
-      // Trigger play AFTER ready (async-safe) – fixes "paused but playing=false" bug
       if !self.paused { self.avBridge?.play() }
     }
     avBridge?.onProgress = { [weak self] current, total, playable in
       self?.onProgress?(.init(currentTime: current, duration: total, playableDuration: playable))
     }
     avBridge?.onBuffering = { [weak self] isBuffering in
-      self?.onBuffering?(isBuffering)
-      self?.onStateChange?(isBuffering ? .buffering : .playing)
+      guard let self = self else { return }
+      self.onBuffering?(isBuffering)
+      if isBuffering {
+        self.onStateChange?(.buffering)
+      } else {
+        self.onStateChange?(self.paused ? .paused : .playing)
+      }
     }
     avBridge?.onError = { [weak self] code, message in
       guard let self = self else { return }
@@ -410,7 +451,7 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
           self.loadVlc()
         }
       } else {
-        self.onError?(.init(code: Double(code), message: message, nativeError: nil))
+        self.onError?(.init(code: Double(code), message: message, protocol: self.activeProtocol, nativeError: nil, recoverable: false))
         self.onStateChange?(.error)
       }
     }
@@ -428,27 +469,31 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
         naturalSize: .init(width: 0, height: 0)
       ))
       self.onStateChange?(.ready)
-      // NOTE: Do NOT call vlcBridge.play() here.
-      // VLC's onReady fires from the .playing delegate state,
-      // meaning VLC is ALREADY playing at this point.
-      // Calling play() again would be a no-op at best, or cause stuttering.
     }
     vlcBridge?.onProgress = { [weak self] current, total, _ in
       self?.onProgress?(.init(currentTime: current, duration: total, playableDuration: 0))
     }
     vlcBridge?.onBuffering = { [weak self] isBuffering in
-      self?.onBuffering?(isBuffering)
-      self?.onStateChange?(isBuffering ? .buffering : .playing)
+      guard let self = self else { return }
+      self.onBuffering?(isBuffering)
+      if isBuffering {
+        self.onStateChange?(.buffering)
+      } else {
+        self.onStateChange?(self.paused ? .paused : .playing)
+      }
     }
     vlcBridge?.onError = { [weak self] code, message in
-      self?.onError?(.init(code: Double(code), message: message, nativeError: nil))
-      self?.onStateChange?(.error)
+      guard let self = self else { return }
+      self.onError?(.init(code: Double(code), message: message, protocol: self.activeProtocol, nativeError: nil, recoverable: true))
+      if self.activeProtocol == .rtsp || self.activeProtocol == .rtmp {
+        self.scheduleReconnect()
+      } else {
+        self.onStateChange?(.error)
+      }
     }
     vlcBridge?.onEnd = { [weak self] in
       guard let self = self else { return }
-      // If RTSP stream ends/disconnects (e.g. camera doesn't support PAUSE),
-      // mark it so activePlay() will reload the URL on next play().
-      if self.activeProtocol == .rtsp && self.paused {
+      if (self.activeProtocol == .rtsp || self.activeProtocol == .rtmp) && self.paused {
         self._rtspNeedsReconnect = true
       }
       self.onEnd?()
@@ -464,22 +509,17 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
     case .cover:   avBridge?.setVideoGravity(.resizeAspectFill)
     case .fill:    avBridge?.setVideoGravity(.resize)
     }
-    // VLC resize is handled by the drawable view's layout
   }
 
   // MARK: - Deinit (Memory leak prevention)
 
   deinit {
-    
-    
-    // Capture variables and release them on main thread to avoid background thread release crash
-    let viewToRelease = containerView
-    let avBridgeToRelease = avBridge
-    let vlcBridgeToRelease = vlcBridge
+    reconnectWorkItem?.cancel()
+    let av = avBridge
+    let vlc = vlcBridge
     DispatchQueue.main.async {
-      _ = viewToRelease
-      _ = avBridgeToRelease
-      _ = vlcBridgeToRelease
+      av?.stop()
+      vlc?.stop()
     }
   }
 }

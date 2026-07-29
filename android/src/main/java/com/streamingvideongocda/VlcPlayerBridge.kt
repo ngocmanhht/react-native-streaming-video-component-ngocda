@@ -100,7 +100,8 @@ class VlcPlayerBridge(private val context: Context) {
     }
 
     fun load(url: String) {
-        Log.d("StreamingVideo", "VlcPlayerBridge: load called with url=$url")
+        val safeUrl = SecurityUtils.sanitizeUrl(url)
+        Log.d("StreamingVideo", "VlcPlayerBridge: load called with url=$safeUrl")
         if (player.isPlaying) {
             Log.d("StreamingVideo", "VlcPlayerBridge: player was playing, stopping first")
             player.stop()
@@ -322,14 +323,17 @@ class VlcPlayerBridge(private val context: Context) {
     }
 
     private fun saveBitmap(bitmap: Bitmap): String? {
+        SecurityUtils.pruneSnapshotCache(context.cacheDir)
         val file = File(context.cacheDir, "snapshot_${System.currentTimeMillis()}.jpg")
         return try {
             val out = FileOutputStream(file)
             bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
             out.flush()
             out.close()
+            bitmap.recycle()
             file.absolutePath
         } catch (e: Exception) {
+            bitmap.recycle()
             null
         }
     }

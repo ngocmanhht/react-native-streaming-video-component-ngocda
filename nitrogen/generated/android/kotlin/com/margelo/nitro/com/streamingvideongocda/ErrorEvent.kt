@@ -25,7 +25,13 @@ data class ErrorEvent(
   val message: String,
   @DoNotStrip
   @Keep
-  val nativeError: String?
+  val protocol: StreamProtocol?,
+  @DoNotStrip
+  @Keep
+  val nativeError: String?,
+  @DoNotStrip
+  @Keep
+  val recoverable: Boolean?
 ) {
   /* primary constructor */
 
@@ -37,8 +43,8 @@ data class ErrorEvent(
     @Keep
     @Suppress("unused")
     @JvmStatic
-    private fun fromCpp(code: Double, message: String, nativeError: String?): ErrorEvent {
-      return ErrorEvent(code, message, nativeError)
+    private fun fromCpp(code: Double, message: String, protocol: StreamProtocol?, nativeError: String?, recoverable: Boolean?): ErrorEvent {
+      return ErrorEvent(code, message, protocol, nativeError, recoverable)
     }
   }
 }
