@@ -69,8 +69,12 @@ class VlcPlayerBridge(private val context: Context) {
                         onReady?.invoke(player.length)
                     }
                     MediaPlayer.Event.Buffering -> {
-                        Log.d("StreamingVideo", "VLC Event: Buffering ${event.buffering}%")
-                        onBuffering?.invoke(event.buffering < 100f)
+                        val pct = event.buffering
+                        if (pct < 80f) {
+                            onBuffering?.invoke(true)
+                        } else if (pct >= 95f) {
+                            onBuffering?.invoke(false)
+                        }
                     }
                     MediaPlayer.Event.TimeChanged -> {
                         onProgress?.invoke(player.time, player.length)
