@@ -13,6 +13,7 @@
     "android",
     "ios",
     "cpp",
+    "nitrogen",
     "*.podspec",
     "!lib/typescript/example",
     "!ios/build",
@@ -23,7 +24,7 @@
     "codegen": "npx nitrogen",
     "test": "jest",
     "typecheck": "tsc --noEmit",
-    "prepare": "bob build",
+    "prepare": "nitrogen && bob build",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "format": "prettier --write \"src/**/*.{ts,tsx}\""
   },

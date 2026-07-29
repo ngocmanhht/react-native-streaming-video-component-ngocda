@@ -468,7 +468,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#000',
     justifyContent: 'center',
+    minHeight: 200,
     overflow: 'hidden',
+    width: '100%',
   },
   fullscreenContainer: {
     alignItems: 'center',
