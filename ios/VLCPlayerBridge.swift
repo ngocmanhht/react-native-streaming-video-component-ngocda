@@ -36,11 +36,15 @@ final class VLCPlayerBridge: NSObject, VLCMediaPlayerDelegate {
     guard let u = URL(string: url) else { return }
     let media = VLCMedia(url: u)
     var mediaOptions: [String: Any] = [
-      "rtsp-tcp": true,       // Force TCP – more reliable over NAT/firewall
-      "network-caching": 300, // 300 ms network buffer – low latency
-      "clock-jitter": 0,      // Disable clock jitter compensation for live streams
-      "clock-synchro": 0,     // Disable A/V resync for live streams
+      "rtsp-tcp": true,         // Force TCP – more reliable over NAT/firewall
+      "network-caching": 1000,  // 1000 ms network buffer – WAN/4G stability
     ]
+    if let user = u.user, !user.isEmpty {
+      mediaOptions["rtsp-user"] = user
+    }
+    if let password = u.password, !password.isEmpty {
+      mediaOptions["rtsp-pwd"] = password
+    }
     #if targetEnvironment(simulator)
     mediaOptions["avcodec-hw"] = "none" // Disable hardware decoding on simulator to fix SetupOutputFormat stack overflow crash
     #endif
