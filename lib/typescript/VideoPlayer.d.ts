@@ -2,7 +2,13 @@ import { type FC, type RefObject } from 'react';
 import { type StyleProp, type ViewStyle } from 'react-native';
 import type { VideoPlayerProps, VideoPlayerView } from './VideoPlayer.nitro';
 import { type ControlIcons } from './VideoControls';
-export interface VideoPlayerPublicProps extends Omit<Partial<VideoPlayerProps>, 'paused' | 'volume' | 'muted' | 'zoomEnabled'> {
+export interface VideoPlayerPublicProps extends Omit<Partial<VideoPlayerProps>, 'paused' | 'volume' | 'muted' | 'zoomEnabled' | 'url'> {
+    /** Stream URL */
+    url?: string;
+    /** Stream source string or object { uri: string } */
+    source?: string | {
+        uri?: string;
+    };
     /** Custom styles applied to the container */
     style?: StyleProp<ViewStyle>;
     /**

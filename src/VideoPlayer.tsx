@@ -41,8 +41,14 @@ const NativeVideoPlayer = getHostComponent<VideoPlayerProps, VideoPlayerView>(
 
 export interface VideoPlayerPublicProps extends Omit<
   Partial<VideoPlayerProps>,
-  'paused' | 'volume' | 'muted' | 'zoomEnabled'
+  'paused' | 'volume' | 'muted' | 'zoomEnabled' | 'url'
 > {
+  /** Stream URL */
+  url?: string
+
+  /** Stream source string or object { uri: string } */
+  source?: string | { uri?: string }
+
   /** Custom styles applied to the container */
   style?: StyleProp<ViewStyle>
 
@@ -91,6 +97,8 @@ export interface VideoPlayerPublicProps extends Omit<
 
 export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
   style,
+  url: propUrl,
+  source: propSource,
   paused: externalPaused = false,
   volume: initialVolume = 1,
   muted: initialMuted = true,
@@ -114,6 +122,15 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
 
   ...nativeProps
 }) => {
+  // Resolve raw stream URL string from either `url` or `source` prop
+  const rawUrl =
+    propUrl ||
+    (typeof propSource === 'string'
+      ? propSource
+      : typeof propSource === 'object' && propSource?.uri
+      ? propSource.uri
+      : '') ||
+    ''
   // Internal player state management
   const {
     ref: internalRef,
@@ -286,8 +303,9 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
 
   const playerEl = (
     <NativeVideoPlayer
-      key={streamProtocol}
+      key={`${streamProtocol}-${rawUrl}`}
       hybridRef={callback(handleHybridRef)}
+      url={rawUrl}
       streamProtocol={streamProtocol}
       paused={state.paused}
       volume={state.isMuted ? 0 : state.volume}
