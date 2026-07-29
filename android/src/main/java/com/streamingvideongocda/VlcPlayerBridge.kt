@@ -119,19 +119,6 @@ class VlcPlayerBridge(private val context: Context) {
         val media = Media(libVLC, uri).apply {
             addOption(":rtsp-tcp")
             addOption(":network-caching=1000")
-
-            val userInfo = uri.userInfo
-            if (!userInfo.isNullOrEmpty() && userInfo.contains(":")) {
-                val parts = userInfo.split(":", limit = 2)
-                val user = parts[0]
-                val pwd = parts[1]
-                if (user.isNotEmpty()) {
-                    addOption(":rtsp-user=$user")
-                }
-                if (pwd.isNotEmpty()) {
-                    addOption(":rtsp-pwd=$pwd")
-                }
-            }
         }
         currentMedia = media
         player.media = media

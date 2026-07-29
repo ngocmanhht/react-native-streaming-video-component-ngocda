@@ -262,13 +262,15 @@ class HybridVideoPlayerView(private val ctx: ReactContext)
             )
         )
         rootLayout.requestLayout()
-        vlc.attachSurface(vlcLayout)
-        vlc.load(url)
-        if (!paused) {
-            Log.d("StreamingVideo", "loadVlc -> scheduling vlc.play() with 100ms delay on Main Looper")
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+
+        // Wait for UI looper to perform initial layout pass so SurfaceView/TextureView is valid
+        vlcLayout.post {
+            vlc.attachSurface(vlcLayout)
+            vlc.load(url)
+            if (!paused) {
+                Log.d("StreamingVideo", "loadVlc -> calling vlc.play() after layout post")
                 vlc.play()
-            }, 100)
+            }
         }
     }
 
