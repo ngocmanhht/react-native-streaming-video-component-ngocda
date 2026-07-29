@@ -387,7 +387,7 @@ class HybridVideoPlayerView(private val ctx: ReactContext)
                 useVlcFallback = true
                 loadVlc()
             } else {
-                onError?.invoke(ErrorEvent(code.toDouble(), msg, null))
+                onError?.invoke(ErrorEvent(code.toDouble(), msg, activeProtocol, null, false))
                 onStateChange?.invoke(PlaybackState.ERROR)
             }
         }

@@ -38,8 +38,8 @@ namespace margelo::nitro::streamingvideo {
       double code = this->getFieldValue(fieldCode);
       static const auto fieldMessage = clazz->getField<jni::JString>("message");
       jni::local_ref<jni::JString> message = this->getFieldValue(fieldMessage);
-      static const auto fieldProtocol = clazz->getField<JStreamProtocol>("protocol");
-      jni::local_ref<JStreamProtocol> protocol = this->getFieldValue(fieldProtocol);
+      static const auto fieldStreamProtocol = clazz->getField<JStreamProtocol>("streamProtocol");
+      jni::local_ref<JStreamProtocol> streamProtocol = this->getFieldValue(fieldStreamProtocol);
       static const auto fieldNativeError = clazz->getField<jni::JString>("nativeError");
       jni::local_ref<jni::JString> nativeError = this->getFieldValue(fieldNativeError);
       static const auto fieldRecoverable = clazz->getField<jni::JBoolean>("recoverable");
@@ -47,7 +47,7 @@ namespace margelo::nitro::streamingvideo {
       return ErrorEvent(
         code,
         message->toStdString(),
-        protocol != nullptr ? std::make_optional(protocol->toCpp()) : std::nullopt,
+        streamProtocol != nullptr ? std::make_optional(streamProtocol->toCpp()) : std::nullopt,
         nativeError != nullptr ? std::make_optional(nativeError->toStdString()) : std::nullopt,
         recoverable != nullptr ? std::make_optional(static_cast<bool>(recoverable->value())) : std::nullopt
       );
@@ -66,7 +66,7 @@ namespace margelo::nitro::streamingvideo {
         clazz,
         value.code,
         jni::make_jstring(value.message),
-        value.protocol.has_value() ? JStreamProtocol::fromCpp(value.protocol.value()) : nullptr,
+        value.streamProtocol.has_value() ? JStreamProtocol::fromCpp(value.streamProtocol.value()) : nullptr,
         value.nativeError.has_value() ? jni::make_jstring(value.nativeError.value()) : nullptr,
         value.recoverable.has_value() ? jni::JBoolean::valueOf(value.recoverable.value()) : nullptr
       );

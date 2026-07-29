@@ -451,7 +451,7 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
           self.loadVlc()
         }
       } else {
-        self.onError?(.init(code: Double(code), message: message, protocol: self.activeProtocol, nativeError: nil, recoverable: false))
+        self.onError?(.init(code: Double(code), message: message, streamProtocol: self.activeProtocol, nativeError: nil, recoverable: false))
         self.onStateChange?(.error)
       }
     }
@@ -484,7 +484,7 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
     }
     vlcBridge?.onError = { [weak self] code, message in
       guard let self = self else { return }
-      self.onError?(.init(code: Double(code), message: message, protocol: self.activeProtocol, nativeError: nil, recoverable: true))
+      self.onError?(.init(code: Double(code), message: message, streamProtocol: self.activeProtocol, nativeError: nil, recoverable: true))
       if self.activeProtocol == .rtsp || self.activeProtocol == .rtmp {
         self.scheduleReconnect()
       } else {

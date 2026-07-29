@@ -14,7 +14,7 @@ export interface ProgressEvent {
 export interface ErrorEvent {
     code: number;
     message: string;
-    protocol?: StreamProtocol;
+    streamProtocol?: StreamProtocol;
     nativeError?: string;
     recoverable?: boolean;
 }

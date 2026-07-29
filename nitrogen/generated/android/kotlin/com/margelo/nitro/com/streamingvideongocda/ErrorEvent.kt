@@ -25,7 +25,7 @@ data class ErrorEvent(
   val message: String,
   @DoNotStrip
   @Keep
-  val protocol: StreamProtocol?,
+  val streamProtocol: StreamProtocol?,
   @DoNotStrip
   @Keep
   val nativeError: String?,
@@ -43,8 +43,8 @@ data class ErrorEvent(
     @Keep
     @Suppress("unused")
     @JvmStatic
-    private fun fromCpp(code: Double, message: String, protocol: StreamProtocol?, nativeError: String?, recoverable: Boolean?): ErrorEvent {
-      return ErrorEvent(code, message, protocol, nativeError, recoverable)
+    private fun fromCpp(code: Double, message: String, streamProtocol: StreamProtocol?, nativeError: String?, recoverable: Boolean?): ErrorEvent {
+      return ErrorEvent(code, message, streamProtocol, nativeError, recoverable)
     }
   }
 }

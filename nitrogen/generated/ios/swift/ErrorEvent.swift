@@ -18,9 +18,9 @@ public extension ErrorEvent {
   /**
    * Create a new instance of `ErrorEvent`.
    */
-  init(code: Double, message: String, protocol: StreamProtocol?, nativeError: String?, recoverable: Bool?) {
+  init(code: Double, message: String, streamProtocol: StreamProtocol?, nativeError: String?, recoverable: Bool?) {
     self.init(code, std.string(message), { () -> bridge.std__optional_StreamProtocol_ in
-      if let __unwrappedValue = protocol {
+      if let __unwrappedValue = streamProtocol {
         return bridge.create_std__optional_StreamProtocol_(__unwrappedValue)
       } else {
         return .init()
@@ -51,8 +51,8 @@ public extension ErrorEvent {
   }
   
   @inline(__always)
-  var protocol: StreamProtocol? {
-    return self.__protocol.value
+  var streamProtocol: StreamProtocol? {
+    return self.__streamProtocol.value
   }
   
   @inline(__always)

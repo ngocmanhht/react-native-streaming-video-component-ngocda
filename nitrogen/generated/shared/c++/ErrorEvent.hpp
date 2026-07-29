@@ -44,13 +44,13 @@ namespace margelo::nitro::streamingvideo {
   public:
     double code     SWIFT_PRIVATE;
     std::string message     SWIFT_PRIVATE;
-    std::optional<StreamProtocol> protocol     SWIFT_PRIVATE;
+    std::optional<StreamProtocol> streamProtocol     SWIFT_PRIVATE;
     std::optional<std::string> nativeError     SWIFT_PRIVATE;
     std::optional<bool> recoverable     SWIFT_PRIVATE;
 
   public:
     ErrorEvent() = default;
-    explicit ErrorEvent(double code, std::string message, std::optional<StreamProtocol> protocol, std::optional<std::string> nativeError, std::optional<bool> recoverable): code(code), message(message), protocol(protocol), nativeError(nativeError), recoverable(recoverable) {}
+    explicit ErrorEvent(double code, std::string message, std::optional<StreamProtocol> streamProtocol, std::optional<std::string> nativeError, std::optional<bool> recoverable): code(code), message(message), streamProtocol(streamProtocol), nativeError(nativeError), recoverable(recoverable) {}
 
   public:
     friend bool operator==(const ErrorEvent& lhs, const ErrorEvent& rhs) = default;
@@ -68,7 +68,7 @@ namespace margelo::nitro {
       return margelo::nitro::streamingvideo::ErrorEvent(
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "code"))),
         JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "message"))),
-        JSIConverter<std::optional<margelo::nitro::streamingvideo::StreamProtocol>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "protocol"))),
+        JSIConverter<std::optional<margelo::nitro::streamingvideo::StreamProtocol>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "streamProtocol"))),
         JSIConverter<std::optional<std::string>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "nativeError"))),
         JSIConverter<std::optional<bool>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "recoverable")))
       );
@@ -77,7 +77,7 @@ namespace margelo::nitro {
       jsi::Object obj(runtime);
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "code"), JSIConverter<double>::toJSI(runtime, arg.code));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "message"), JSIConverter<std::string>::toJSI(runtime, arg.message));
-      obj.setProperty(runtime, PropNameIDCache::get(runtime, "protocol"), JSIConverter<std::optional<margelo::nitro::streamingvideo::StreamProtocol>>::toJSI(runtime, arg.protocol));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "streamProtocol"), JSIConverter<std::optional<margelo::nitro::streamingvideo::StreamProtocol>>::toJSI(runtime, arg.streamProtocol));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "nativeError"), JSIConverter<std::optional<std::string>>::toJSI(runtime, arg.nativeError));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "recoverable"), JSIConverter<std::optional<bool>>::toJSI(runtime, arg.recoverable));
       return obj;
@@ -92,7 +92,7 @@ namespace margelo::nitro {
       }
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "code")))) return false;
       if (!JSIConverter<std::string>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "message")))) return false;
-      if (!JSIConverter<std::optional<margelo::nitro::streamingvideo::StreamProtocol>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "protocol")))) return false;
+      if (!JSIConverter<std::optional<margelo::nitro::streamingvideo::StreamProtocol>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "streamProtocol")))) return false;
       if (!JSIConverter<std::optional<std::string>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "nativeError")))) return false;
       if (!JSIConverter<std::optional<bool>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "recoverable")))) return false;
       return true;
