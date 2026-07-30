@@ -33,6 +33,14 @@ final class AVPlayerBridge: NSObject {
     }
   }
 
+  func detach() {
+    removeObservers()
+    playerLayer?.removeFromSuperlayer()
+    playerLayer = nil
+    player = nil
+    targetView = nil
+  }
+
   /// Called when the host view's bounds change (rotation, resize).
   func updateLayout(bounds: CGRect) {
     let update = { [weak self] in

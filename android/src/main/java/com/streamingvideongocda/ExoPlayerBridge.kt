@@ -99,18 +99,7 @@ class ExoPlayerBridge(private val context: Context) {
         p.stop()
         p.clearMediaItems()
 
-        val mediaItem = if (isLive) {
-            MediaItem.Builder()
-                .setUri(url)
-                .setLiveConfiguration(
-                    MediaItem.LiveConfiguration.Builder()
-                        .setTargetOffsetMs(1000) // 1 second target offset for low latency
-                        .build()
-                )
-                .build()
-        } else {
-            MediaItem.fromUri(url)
-        }
+        val mediaItem = MediaItem.fromUri(url)
 
         p.setMediaItem(mediaItem)
         p.repeatMode = if (shouldRepeat) Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_OFF

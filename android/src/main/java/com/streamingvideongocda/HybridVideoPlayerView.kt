@@ -237,7 +237,8 @@ class HybridVideoPlayerView(private val ctx: ReactContext)
         // Stop ExoPlayer and clear its view before switching
         exo.stop()
         rootLayout.removeAllViews()
-        val vlcLayout = VLCVideoLayout(ctx)
+        val activity = ctx.currentActivity ?: ctx
+        val vlcLayout = VLCVideoLayout(activity)
         vlcLayout.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
             val w = vlcLayout.width
             val h = vlcLayout.height
@@ -357,7 +358,10 @@ class HybridVideoPlayerView(private val ctx: ReactContext)
             onReady?.invoke(ReadyEvent(if (dur < 0) -1.0 else dur / 1000.0, NaturalSize(0.0, 0.0)))
             onStateChange?.invoke(PlaybackState.READY)
             // Async-safe auto-play: only play after ExoPlayer signals it is ready
-            if (!paused) exo.play()
+            if (!paused) {
+                exo.play()
+                onStateChange?.invoke(PlaybackState.PLAYING)
+            }
         }
         exo.onProgress = { cur, dur ->
             onProgress?.invoke(ProgressEvent(cur / 1000.0, if (dur < 0) -1.0 else dur / 1000.0, 0.0))
@@ -401,7 +405,10 @@ class HybridVideoPlayerView(private val ctx: ReactContext)
             onReady?.invoke(ReadyEvent(if (dur < 0) -1.0 else dur / 1000.0, NaturalSize(0.0, 0.0)))
             onStateChange?.invoke(PlaybackState.READY)
             // Async-safe auto-play
-            if (!paused) vlc.play()
+            if (!paused) {
+                vlc.play()
+                onStateChange?.invoke(PlaybackState.PLAYING)
+            }
         }
         vlc.onProgress = { cur, dur ->
             onProgress?.invoke(ProgressEvent(cur / 1000.0, if (dur < 0) -1.0 else dur / 1000.0, 0.0))

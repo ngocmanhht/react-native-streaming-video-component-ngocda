@@ -11,6 +11,14 @@ private class HybridVideoPlayerContainerView: UIView {
     super.layoutSubviews()
     onLayoutSubviews?(bounds)
   }
+
+  override func didAddSubview(_ subview: UIView) {
+    super.didAddSubview(subview)
+    // Automatically size any dynamically added VLC/AVPlayer rendering subview
+    // to fill the container and configure it for auto-resizing.
+    subview.frame = bounds
+    subview.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+  }
 }
 
 class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
@@ -24,15 +32,7 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
     v.onLayoutSubviews = { [weak self] bounds in
       guard let self = self else { return }
       self.avBridge?.updateLayout(bounds: bounds)
-      
-      // Update VLC rendering subviews frame on bounds change
-      if self.useVlcFallback || self.activeProtocol == .rtsp {
-        for subview in v.subviews {
-          if !(subview is AVRoutePickerView) {
-            subview.frame = bounds
-          }
-        }
-      }
+      self.vlcBridge?.updateLayout(bounds: bounds)
     }
     return v
   }()
@@ -227,13 +227,22 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
   }
 
   private func loadAVPlayer(isLiveStream: Bool) {
-    vlcBridge?.stop()
+    vlcBridge?.detach()
+    for subview in containerView.subviews {
+      subview.removeFromSuperview()
+    }
     avBridge?.attach(to: containerView)
     avBridge?.load(url: url, isLiveStream: isLiveStream)
+    if !paused {
+      avBridge?.play()
+    }
   }
 
   private func loadVlc() {
-    avBridge?.stop()
+    avBridge?.detach()
+    for subview in containerView.subviews {
+      subview.removeFromSuperview()
+    }
     containerView.setNeedsLayout()
     containerView.layoutIfNeeded()
     vlcBridge?.attach(to: containerView)
@@ -430,7 +439,10 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
         naturalSize: .init(width: Double(size.width), height: Double(size.height))
       ))
       self.onStateChange?(.ready)
-      if !self.paused { self.avBridge?.play() }
+      if !self.paused {
+        self.avBridge?.play()
+        self.onStateChange?(.playing)
+      }
     }
     avBridge?.onProgress = { [weak self] current, total, playable in
       self?.onProgress?(.init(currentTime: current, duration: total, playableDuration: playable))
@@ -471,6 +483,10 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
         naturalSize: .init(width: 0, height: 0)
       ))
       self.onStateChange?(.ready)
+      if !self.paused {
+        self.vlcBridge?.play()
+        self.onStateChange?(.playing)
+      }
     }
     vlcBridge?.onProgress = { [weak self] current, total, _ in
       self?.onProgress?(.init(currentTime: current, duration: total, playableDuration: 0))

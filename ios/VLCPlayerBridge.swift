@@ -27,6 +27,13 @@ final class VLCPlayerBridge: NSObject, VLCMediaPlayerDelegate {
     player.drawable = view
   }
 
+  func updateLayout(bounds: CGRect) {
+    guard let containerView = containerView, bounds.width > 0, bounds.height > 0 else { return }
+    for subview in containerView.subviews {
+      subview.frame = bounds
+    }
+  }
+
   func load(url: String, options: [String] = []) {
     // Stop current stream and nil out media before loading new URL.
     // Setting player.media = nil releases the native network buffers (~50MB/stream).
@@ -36,7 +43,6 @@ final class VLCPlayerBridge: NSObject, VLCMediaPlayerDelegate {
     player.media = nil
 
     guard let u = URL(string: url) else { return }
-    let media = VLCMedia(url: u)
     var mediaOptions: [String: Any] = [
       "rtsp-tcp": true,         // Force TCP – more reliable over NAT/firewall
       "network-caching": 1000,  // 1000 ms network buffer – WAN/4G stability
@@ -44,6 +50,8 @@ final class VLCPlayerBridge: NSObject, VLCMediaPlayerDelegate {
     #if targetEnvironment(simulator)
     mediaOptions["avcodec-hw"] = "none" // Disable hardware decoding on simulator to fix SetupOutputFormat stack overflow crash
     #endif
+
+    let media = VLCMedia(url: u)
     media.addOptions(mediaOptions)
     player.media = media
     // ARC will release 'media' local var here automatically – no manual release() needed
@@ -56,6 +64,13 @@ final class VLCPlayerBridge: NSObject, VLCMediaPlayerDelegate {
     player.stop()
     // Nil out media to free native network buffers immediately
     player.media = nil
+  }
+
+  func detach() {
+    player.stop()
+    player.media = nil
+    player.drawable = nil
+    containerView = nil
   }
 
   func setMuted(_ muted: Bool) { player.audio?.isMuted = muted }
