@@ -27,12 +27,7 @@ final class VLCPlayerBridge: NSObject, VLCMediaPlayerDelegate {
     player.drawable = view
   }
 
-  func updateLayout(bounds: CGRect) {
-    guard let containerView = containerView, bounds.width > 0, bounds.height > 0 else { return }
-    for subview in containerView.subviews {
-      subview.frame = bounds
-    }
-  }
+
 
   private func encodeRtspUrl(_ rawUrl: String) -> String {
     guard rawUrl.lowercased().hasPrefix("rtsp://") else { return rawUrl }
@@ -60,32 +55,44 @@ final class VLCPlayerBridge: NSObject, VLCMediaPlayerDelegate {
     
     let allowedChars = CharacterSet.urlQueryAllowed.subtracting(CharacterSet(charactersIn: ":@?#/"))
     let encodedUser = username.addingPercentEncoding(withAllowedCharacters: allowedChars) ?? username
-    let encodedPass = password.addingPercentEncoding(withAllowedCharacters: allowedCharacters) ?? password
+    let encodedPass = password.addingPercentEncoding(withAllowedCharacters: allowedChars) ?? password
     
     let newAuth = password.isEmpty ? "\(encodedUser)@\(hostPort)" : "\(encodedUser):\(encodedPass)@\(hostPort)"
     return "\(scheme)\(newAuth)\(pathAndQuery)"
   }
 
-  func load(url: String, options: [String] = []) {
-    // Stop current stream and nil out media before loading new URL.
-    // Setting player.media = nil releases the native network buffers (~50MB/stream).
-    // In Swift ARC, we do NOT call release() manually – ARC handles it when
-    // 'media' goes out of scope at the end of this function.
+  // 1. Sửa hàm updateLayout
+func updateLayout(bounds: CGRect) {
+    guard let containerView = containerView, bounds.width > 0, bounds.height > 0 else { return }
+    for subview in containerView.subviews {
+        subview.frame = bounds
+        subview.setNeedsLayout()
+        subview.layoutIfNeeded()
+    }
+}
+
+// 2. Sửa hàm load: Tăng caching lên 3000ms
+func load(url: String, options: [String] = []) {
     player.stop()
     player.media = nil
 
     let cleanUrlString = encodeRtspUrl(url)
-    guard let u = URL(string: cleanUrlString) else { return }
-    var mediaOptions: [String: Any] = [
-      ":rtsp-tcp": true,         // Force TCP – more reliable over NAT/firewall
-      ":network-caching": 1000,  // 1000 ms network buffer – WAN/4G stability
-    ]
+    guard let u = URL(string: cleanUrlString) ?? URL(string: cleanUrlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "") else { return }
 
     let media = VLCMedia(url: u)
-    media.addOptions(mediaOptions)
+    
+    media.addOption(":rtsp-tcp")
+    media.addOption(":network-caching=3000") // 💡 Tăng lên 3000ms
+    media.addOption(":rtsp-caching=3000")
+    media.addOption(":clock-jitter=0")
+    media.addOption(":clock-synchro=0")
+
+    #if targetEnvironment(simulator)
+    media.addOption(":avcodec-hw=none")
+    #endif
+
     player.media = media
-    // ARC will release 'media' local var here automatically – no manual release() needed
-  }
+}
 
   func play()   { player.play() }
   func pause()  { player.pause() }

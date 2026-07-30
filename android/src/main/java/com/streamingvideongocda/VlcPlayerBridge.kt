@@ -95,38 +95,59 @@ class VlcPlayerBridge(private val context: Context) {
         }
     }
 
-    fun attachSurface(vlcVideoLayout: VLCVideoLayout) {
-        Log.d("StreamingVideo", "VlcPlayerBridge: attachSurface called")
-        try {
-            player.detachViews()
-        } catch (_: Exception) {}
-        vlcVideoLayout.setBackgroundColor(android.graphics.Color.TRANSPARENT)
-        // Use TextureView (true) for clean compositing within React Native's Fabric view trees.
-        // Since we wait for vlcLayout to have non-zero dimensions before calling this,
-        // the SurfaceTexture is guaranteed to be available, preventing vout creation crashes.
-        player.attachViews(vlcVideoLayout, null, false, true)
+// 1. Sửa hàm attachSurface: Đổi tham số cuối useTextureView từ true -> false
+fun attachSurface(vlcVideoLayout: VLCVideoLayout) {
+    Log.d("StreamingVideo", "VlcPlayerBridge: attachSurface called")
+    try {
+        player.detachViews()
+    } catch (_: Exception) {}
+    vlcVideoLayout.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+    // 💡 Chuyển tham số thứ 4 sang false để dùng SurfaceView Render trực tiếp từ phần cứng
+    player.attachViews(vlcVideoLayout, null, false, false)
+    player.videoScale = MediaPlayer.ScaleType.SURFACE_BEST_FIT
+}
+
+// 2. Sửa hàm load: Tăng network-caching lên 3000ms
+fun load(url: String) {
+    val encodedUrl = SecurityUtils.encodeRtspUrl(url)
+    Log.d("StreamingVideo", "VlcPlayerBridge: load encodedUrl=$encodedUrl")
+
+    if (player.isPlaying) {
+        player.stop()
     }
+    try { currentMedia?.release() } catch (_: Exception) {}
+
+    val uri = Uri.parse(encodedUrl)
+    val media = Media(libVLC, uri).apply {
+        addOption(":rtsp-tcp")
+        addOption(":network-caching=3000") // 💡 Tăng lên 3000ms để đủ chờ I-Frame của Hikvision
+        addOption(":rtsp-caching=3000")
+        addOption(":clock-jitter=0")
+        addOption(":clock-synchro=0")
+    }
+    currentMedia = media
+    player.media = media
+}
 
     fun load(url: String) {
-        val safeUrl = SecurityUtils.encodeRtspUrl(url)
-        Log.d("StreamingVideo", "VlcPlayerBridge: load called with url=$safeUrl")
-        if (player.isPlaying) {
-            Log.d("StreamingVideo", "VlcPlayerBridge: player was playing, stopping first")
-            player.stop()
-        }
+    val encodedUrl = SecurityUtils.encodeRtspUrl(url)
+    Log.d("StreamingVideo", "VlcPlayerBridge: load encodedUrl=$encodedUrl")
 
-        try {
-            currentMedia?.release()
-        } catch (_: Exception) {}
-
-        val uri = Uri.parse(url)
-        val media = Media(libVLC, uri).apply {
-            addOption(":rtsp-tcp")
-            addOption(":network-caching=1000")
-        }
-        currentMedia = media
-        player.media = media
+    if (player.isPlaying) {
+        player.stop()
     }
+    try { currentMedia?.release() } catch (_: Exception) {}
+
+    val uri = Uri.parse(encodedUrl)
+    val media = Media(libVLC, uri).apply {
+        addOption(":rtsp-tcp")
+        addOption(":network-caching=1000")
+        addOption(":rtsp-caching=1000")
+        addOption(":clock-jitter=0")
+    }
+    currentMedia = media
+    player.media = media
+}
 
     fun play() {
         Log.d("StreamingVideo", "VlcPlayerBridge: play() called")
