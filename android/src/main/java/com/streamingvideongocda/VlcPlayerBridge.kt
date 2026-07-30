@@ -108,7 +108,7 @@ class VlcPlayerBridge(private val context: Context) {
     }
 
     fun load(url: String) {
-        val safeUrl = SecurityUtils.sanitizeUrl(url)
+        val safeUrl = SecurityUtils.encodeRtspUrl(url)
         Log.d("StreamingVideo", "VlcPlayerBridge: load called with url=$safeUrl")
         if (player.isPlaying) {
             Log.d("StreamingVideo", "VlcPlayerBridge: player was playing, stopping first")
@@ -120,24 +120,9 @@ class VlcPlayerBridge(private val context: Context) {
         } catch (_: Exception) {}
 
         val uri = Uri.parse(url)
-        val builder = uri.buildUpon()
-        if (uri.userInfo != null) {
-            builder.encodedAuthority(if (uri.port != -1) "${uri.host}:${uri.port}" else uri.host)
-        }
-        val cleanUri = builder.build()
-
-        val media = Media(libVLC, cleanUri).apply {
+        val media = Media(libVLC, uri).apply {
             addOption(":rtsp-tcp")
             addOption(":network-caching=1000")
-            
-            val userInfo = uri.userInfo
-            if (userInfo != null && userInfo.contains(":")) {
-                val parts = userInfo.split(":", limit = 2)
-                if (parts.size == 2) {
-                    addOption(":rtsp-user=${parts[0]}")
-                    addOption(":rtsp-pwd=${parts[1]}")
-                }
-            }
         }
         currentMedia = media
         player.media = media

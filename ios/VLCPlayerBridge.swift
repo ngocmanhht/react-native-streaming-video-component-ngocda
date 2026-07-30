@@ -34,6 +34,38 @@ final class VLCPlayerBridge: NSObject, VLCMediaPlayerDelegate {
     }
   }
 
+  private func encodeRtspUrl(_ rawUrl: String) -> String {
+    guard rawUrl.lowercased().hasPrefix("rtsp://") else { return rawUrl }
+    let scheme = "rtsp://"
+    let rest = String(rawUrl.dropFirst(scheme.count))
+    
+    let pathIndex = rest.firstIndex(of: "/") ?? rest.endIndex
+    let authority = String(rest[..<pathIndex])
+    let pathAndQuery = String(rest[pathIndex...])
+    
+    guard let lastAtIndex = authority.lastIndex(of: "@") else { return rawUrl }
+    
+    let userInfo = String(authority[..<lastAtIndex])
+    let hostPort = String(authority[authority.index(after: lastAtIndex)...])
+    
+    let username: String
+    let password: String
+    if let colonIndex = userInfo.firstIndex(of: ":") {
+        username = String(userInfo[..<colonIndex])
+        password = String(userInfo[userInfo.index(after: colonIndex)...])
+    } else {
+        username = userInfo
+        password = ""
+    }
+    
+    let allowedChars = CharacterSet.urlQueryAllowed.subtracting(CharacterSet(charactersIn: ":@?#/"))
+    let encodedUser = username.addingPercentEncoding(withAllowedCharacters: allowedChars) ?? username
+    let encodedPass = password.addingPercentEncoding(withAllowedCharacters: allowedCharacters) ?? password
+    
+    let newAuth = password.isEmpty ? "\(encodedUser)@\(hostPort)" : "\(encodedUser):\(encodedPass)@\(hostPort)"
+    return "\(scheme)\(newAuth)\(pathAndQuery)"
+  }
+
   func load(url: String, options: [String] = []) {
     // Stop current stream and nil out media before loading new URL.
     // Setting player.media = nil releases the native network buffers (~50MB/stream).
@@ -42,14 +74,12 @@ final class VLCPlayerBridge: NSObject, VLCMediaPlayerDelegate {
     player.stop()
     player.media = nil
 
-    guard let u = URL(string: url) else { return }
+    let cleanUrlString = encodeRtspUrl(url)
+    guard let u = URL(string: cleanUrlString) else { return }
     var mediaOptions: [String: Any] = [
-      "rtsp-tcp": true,         // Force TCP – more reliable over NAT/firewall
-      "network-caching": 1000,  // 1000 ms network buffer – WAN/4G stability
+      ":rtsp-tcp": true,         // Force TCP – more reliable over NAT/firewall
+      ":network-caching": 1000,  // 1000 ms network buffer – WAN/4G stability
     ]
-    #if targetEnvironment(simulator)
-    mediaOptions["avcodec-hw"] = "none" // Disable hardware decoding on simulator to fix SetupOutputFormat stack overflow crash
-    #endif
 
     let media = VLCMedia(url: u)
     media.addOptions(mediaOptions)

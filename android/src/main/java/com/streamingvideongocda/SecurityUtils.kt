@@ -38,4 +38,41 @@ object SecurityUtils {
             }
         } catch (_: Exception) {}
     }
+
+    // SecurityUtils.kt
+fun encodeRtspUrl(rawUrl: String?): String {
+    if (rawUrl.isNullOrEmpty() || !rawUrl.startsWith("rtsp://", ignoreCase = true)) {
+        return rawUrl ?: ""
+    }
+    try {
+        val scheme = "rtsp://"
+        val rest = rawUrl.substring(scheme.length)
+        val pathIndex = rest.indexOf('/').let { if (it == -1) rest.length else it }
+        val authority = rest.substring(0, pathIndex)
+        val pathAndQuery = rest.substring(pathIndex)
+
+        // Tìm vị trí '@' CUỐI CÙNG trong authority để tách userInfo và host:port
+        val lastAtIndex = authority.lastIndexOf('@')
+        if (lastAtIndex == -1) return rawUrl // Không có thông tin auth
+
+        val userInfo = authority.substring(0, lastAtIndex)
+        val hostPort = authority.substring(lastAtIndex + 1)
+
+        val colonIndex = userInfo.indexOf(':')
+        val (username, password) = if (colonIndex != -1) {
+            userInfo.substring(0, colonIndex) to userInfo.substring(colonIndex + 1)
+        } else {
+            userInfo to ""
+        }
+
+        // Encode riêng biệt username và password
+        val encodedUser = java.net.URLEncoder.encode(username, "UTF-8").replace("+", "%20")
+        val encodedPass = java.net.URLEncoder.encode(password, "UTF-8").replace("+", "%20")
+
+        val newAuth = if (encodedPass.isNotEmpty()) "$encodedUser:$encodedPass@$hostPort" else "$encodedUser@$hostPort"
+        return "$scheme$newAuth$pathAndQuery"
+    } catch (_: Exception) {
+        return rawUrl
+    }
+}
 }

@@ -232,48 +232,76 @@ class HybridVideoPlayerView(private val ctx: ReactContext)
         }
     }
 
-    private fun loadVlc() {
-        Log.d("StreamingVideo", "loadVlc: url=$url")
-        // Stop ExoPlayer and clear its view before switching
-        exo.stop()
-        rootLayout.removeAllViews()
-        val activity = ctx.currentActivity ?: ctx
-        val vlcLayout = VLCVideoLayout(activity)
-        vlcLayout.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-            val w = vlcLayout.width
-            val h = vlcLayout.height
-            if (w > 0 && h > 0) {
-                for (i in 0 until vlcLayout.childCount) {
-                    val child = vlcLayout.getChildAt(i)
-                    child.post {
-                        child.measure(
-                            android.view.View.MeasureSpec.makeMeasureSpec(w, android.view.View.MeasureSpec.EXACTLY),
-                            android.view.View.MeasureSpec.makeMeasureSpec(h, android.view.View.MeasureSpec.EXACTLY)
-                        )
-                        child.layout(0, 0, w, h)
-                    }
-                }
-            }
-        }
-        rootLayout.addView(
-            vlcLayout,
-            FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
-            )
-        )
-        rootLayout.requestLayout()
+    // private fun loadVlc() {
+    //     Log.d("StreamingVideo", "loadVlc: url=$url")
+    //     // Stop ExoPlayer and clear its view before switching
+    //     exo.stop()
+    //     rootLayout.removeAllViews()
+    //     val activity = ctx.currentActivity ?: ctx
+    //     val vlcLayout = VLCVideoLayout(activity)
+    //     vlcLayout.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+    //         val w = vlcLayout.width
+    //         val h = vlcLayout.height
+    //         if (w > 0 && h > 0) {
+    //             for (i in 0 until vlcLayout.childCount) {
+    //                 val child = vlcLayout.getChildAt(i)
+    //                 child.post {
+    //                     child.measure(
+    //                         android.view.View.MeasureSpec.makeMeasureSpec(w, android.view.View.MeasureSpec.EXACTLY),
+    //                         android.view.View.MeasureSpec.makeMeasureSpec(h, android.view.View.MeasureSpec.EXACTLY)
+    //                     )
+    //                     child.layout(0, 0, w, h)
+    //                 }
+    //             }
+    //         }
+    //     }
+    //     rootLayout.addView(
+    //         vlcLayout,
+    //         FrameLayout.LayoutParams(
+    //             FrameLayout.LayoutParams.MATCH_PARENT,
+    //             FrameLayout.LayoutParams.MATCH_PARENT
+    //         )
+    //     )
+    //     rootLayout.requestLayout()
 
-        // Wait for UI looper to perform initial layout pass so SurfaceView/TextureView is valid
-        vlcLayout.post {
-            vlc.attachSurface(vlcLayout)
-            vlc.load(url)
-            if (!paused) {
-                Log.d("StreamingVideo", "loadVlc -> calling vlc.play() after layout post")
-                vlc.play()
-            }
+    //     // Wait for UI looper to perform initial layout pass so SurfaceView/TextureView is valid
+    //     vlcLayout.post {
+    //         vlc.attachSurface(vlcLayout)
+    //         vlc.load(url)
+    //         if (!paused) {
+    //             Log.d("StreamingVideo", "loadVlc -> calling vlc.play() after layout post")
+    //             vlc.play()
+    //         }
+    //     }
+    // }
+    // HybridVideoPlayerView.kt
+private fun loadVlc() {
+    Log.d("StreamingVideo", "loadVlc: url=$url")
+    exo.stop()
+    rootLayout.removeAllViews()
+    
+    val activity = ctx.currentActivity ?: ctx
+    val vlcLayout = VLCVideoLayout(activity)
+    
+    // Gán MATCH_PARENT chắc chắn cho Layout Container
+    rootLayout.addView(
+        vlcLayout,
+        FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT
+        )
+    )
+    rootLayout.requestLayout()
+
+    // Chờ UI Thread hoàn tất layout pass đầu tiên trước khi attach surface
+    vlcLayout.post {
+        vlc.attachSurface(vlcLayout)
+        vlc.load(url)
+        if (!paused) {
+            vlc.play()
         }
     }
+ }
 
     private fun activePlay() {
         if (useVlcFallback) {
