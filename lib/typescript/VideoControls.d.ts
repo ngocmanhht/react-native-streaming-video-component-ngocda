@@ -25,6 +25,7 @@ export interface VideoControlsProps {
     state: VideoPlayerState;
     streamProtocol: StreamProtocol;
     isFullscreen: boolean;
+    isLive?: boolean;
     seekInterval?: number;
     icons?: ControlIcons;
     onPlay: () => void;

@@ -30,8 +30,12 @@ class VlcPlayerBridge(private val context: Context) {
         fun getLibVLC(context: Context): LibVLC {
             return libVLCInstance ?: synchronized(this) {
                 libVLCInstance ?: LibVLC(context.applicationContext, arrayListOf(
-                    "-vvv",                   // Enable native verbose debug logging (writes directly to logcat!)
                     "--rtsp-tcp",             // Force TCP for RTSP (more reliable over NAT/firewall)
+                    "--codec=all",            // Disable hardware decoding completely to prevent MediaCodec SIGABRT crashes on RTSP
+                    "--no-mediacodec-dr",
+                    "--no-omxil-dr",
+                    "--drop-late-frames",
+                    "--skip-frames"
                 )).also { libVLCInstance = it }
             }
         }
@@ -95,59 +99,54 @@ class VlcPlayerBridge(private val context: Context) {
         }
     }
 
-// 1. Sửa hàm attachSurface: Đổi tham số cuối useTextureView từ true -> false
-fun attachSurface(vlcVideoLayout: VLCVideoLayout) {
-    Log.d("StreamingVideo", "VlcPlayerBridge: attachSurface called")
-    try {
-        player.detachViews()
-    } catch (_: Exception) {}
-    vlcVideoLayout.setBackgroundColor(android.graphics.Color.TRANSPARENT)
-    // 💡 Chuyển tham số thứ 4 sang false để dùng SurfaceView Render trực tiếp từ phần cứng
-    player.attachViews(vlcVideoLayout, null, false, false)
-    player.videoScale = MediaPlayer.ScaleType.SURFACE_BEST_FIT
-}
-
-// 2. Sửa hàm load: Tăng network-caching lên 3000ms
-fun load(url: String) {
-    val encodedUrl = SecurityUtils.encodeRtspUrl(url)
-    Log.d("StreamingVideo", "VlcPlayerBridge: load encodedUrl=$encodedUrl")
-
-    if (player.isPlaying) {
-        player.stop()
+    fun attachSurface(vlcVideoLayout: VLCVideoLayout) {
+        Log.d("StreamingVideo", "VlcPlayerBridge: attachSurface called")
+        try {
+            player.detachViews()
+        } catch (_: Exception) {}
+        vlcVideoLayout.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+        // 💡 useTextureView = true để tương thích an toàn với React Native và tránh crash do hủy SurfaceView
+        player.attachViews(vlcVideoLayout, null, false, true)
+        player.videoScale = MediaPlayer.ScaleType.SURFACE_BEST_FIT
     }
-    try { currentMedia?.release() } catch (_: Exception) {}
 
-    val uri = Uri.parse(encodedUrl)
-    val media = Media(libVLC, uri).apply {
-        addOption(":rtsp-tcp")
-        addOption(":network-caching=3000") // 💡 Tăng lên 3000ms để đủ chờ I-Frame của Hikvision
-        addOption(":rtsp-caching=3000")
-        addOption(":clock-jitter=0")
-        addOption(":clock-synchro=0")
+    fun load(url: String, headers: Map<String, String>? = null) {
+        val encodedUrl = SecurityUtils.encodeRtspUrl(url)
+        Log.d("StreamingVideo", "VlcPlayerBridge: load url=${SecurityUtils.sanitizeUrl(encodedUrl)}")
+
+        if (player.isPlaying) {
+            player.stop()
+        }
+
+        val uri = Uri.parse(encodedUrl)
+        val media = Media(libVLC, uri).apply {
+            addOption(":rtsp-tcp")
+            addOption(":network-caching=3000") // 💡 Tăng lên 3000ms để đủ chờ I-Frame của Hikvision
+            addOption(":rtsp-caching=3000")
+            addOption(":clock-jitter=0")
+            addOption(":clock-synchro=0")
+            addOption(":codec=all")            // 💡 Tránh crash SIGABRT ở tầng MediaCodec NDK
+            addOption(":no-mediacodec-dr")
+            addOption(":no-omxil-dr")
+            addOption(":drop-late-frames")
+            addOption(":skip-frames")
+            headers?.forEach { (k, v) ->
+                if (k.equals("User-Agent", ignoreCase = true)) {
+                    addOption(":http-user-agent=$v")
+                } else if (k.equals("Referer", ignoreCase = true)) {
+                    addOption(":http-referrer=$v")
+                }
+            }
+        }
+        val oldMedia = currentMedia
+        currentMedia = media
+        player.media = media
+        if (oldMedia != null) {
+            Handler(Looper.getMainLooper()).postDelayed({
+                try { oldMedia.release() } catch (_: Exception) {}
+            }, 1000)
+        }
     }
-    currentMedia = media
-    player.media = media
-}
-
-    fun load(url: String) {
-    val encodedUrl = SecurityUtils.encodeRtspUrl(url)
-    Log.d("StreamingVideo", "VlcPlayerBridge: load encodedUrl=$encodedUrl")
-
-    if (player.isPlaying) {
-        player.stop()
-    }
-    try { currentMedia?.release() } catch (_: Exception) {}
-
-    val uri = Uri.parse(encodedUrl)
-    val media = Media(libVLC, uri).apply {
-        addOption(":rtsp-tcp")
-        addOption(":network-caching=1000")
-        addOption(":rtsp-caching=1000")
-        addOption(":clock-jitter=0")
-    }
-    currentMedia = media
-    player.media = media
-}
 
     fun play() {
         Log.d("StreamingVideo", "VlcPlayerBridge: play() called")
@@ -159,10 +158,10 @@ fun load(url: String) {
     }
     fun stop() {
         Log.d("StreamingVideo", "VlcPlayerBridge: stop() called")
-        if (player.isPlaying) {
-            player.stop()
-        }
         try {
+            if (player.isPlaying) {
+                player.stop()
+            }
             player.detachViews()
         } catch (_: Exception) {}
     }
@@ -182,9 +181,11 @@ fun load(url: String) {
     }
 
     fun seekTo(positionMs: Long, onDone: (Boolean) -> Unit) {
-        if (!player.isSeekable) { onDone(false); return }
-        player.time = positionMs
-        onDone(true)
+        Handler(Looper.getMainLooper()).post {
+            if (!player.isSeekable) { onDone(false); return@post }
+            player.time = positionMs
+            onDone(true)
+        }
     }
 
     val currentPositionMs: Long get() = player.time
@@ -201,8 +202,10 @@ fun load(url: String) {
             Log.d("StreamingVideo", "VlcPlayerBridge: found TextureView, capturing bitmap synchronously")
             val bitmap = textureView.bitmap
             if (bitmap != null) {
-                val path = saveBitmap(bitmap)
-                callback(path)
+                java.util.concurrent.Executors.newSingleThreadExecutor().execute {
+                    val path = saveBitmap(bitmap)
+                    Handler(Looper.getMainLooper()).post { callback(path) }
+                }
                 return
             }
         }
@@ -221,8 +224,10 @@ fun load(url: String) {
             try {
                 PixelCopy.request(surfaceView, bitmap, { result ->
                     if (result == PixelCopy.SUCCESS) {
-                        val path = saveBitmap(bitmap)
-                        callback(path)
+                        java.util.concurrent.Executors.newSingleThreadExecutor().execute {
+                            val path = saveBitmap(bitmap)
+                            Handler(Looper.getMainLooper()).post { callback(path) }
+                        }
                     } else {
                         Log.e("StreamingVideo", "VlcPlayerBridge: PixelCopy request failed with code $result")
                         fallbackWindowCapture(parentView, callback)
@@ -273,8 +278,10 @@ fun load(url: String) {
                     PixelCopy.request(window, rect, bitmap, { result ->
                         if (result == PixelCopy.SUCCESS) {
                             Log.d("StreamingVideo", "VlcPlayerBridge: Window PixelCopy SUCCESS")
-                            val path = saveBitmap(bitmap)
-                            callback(path)
+                            java.util.concurrent.Executors.newSingleThreadExecutor().execute {
+                                val path = saveBitmap(bitmap)
+                                Handler(Looper.getMainLooper()).post { callback(path) }
+                            }
                         } else {
                             Log.e("StreamingVideo", "VlcPlayerBridge: Window PixelCopy failed with code $result")
                             callback(null)
@@ -300,8 +307,10 @@ fun load(url: String) {
             if (cache != null) {
                 val copy = Bitmap.createBitmap(cache)
                 view.isDrawingCacheEnabled = false
-                val path = saveBitmap(copy)
-                callback(path)
+                java.util.concurrent.Executors.newSingleThreadExecutor().execute {
+                    val path = saveBitmap(copy)
+                    Handler(Looper.getMainLooper()).post { callback(path) }
+                }
             } else {
                 Log.e("StreamingVideo", "VlcPlayerBridge: drawing cache is null")
                 view.isDrawingCacheEnabled = false
@@ -366,8 +375,9 @@ fun load(url: String) {
         // Order matters: stop player before releasing media player before releasing libVLC
         // Incorrect order causes JNI crash or native memory corruption
         try {
-            if (player.isPlaying) player.stop()
             player.setEventListener(null) // Prevent callbacks during release
+            if (player.isPlaying) player.stop()
+            player.detachViews() // Detach views before releasing player
             player.release()
         } catch (_: Exception) {}
         try {

@@ -61,18 +61,14 @@ final class VLCPlayerBridge: NSObject, VLCMediaPlayerDelegate {
     return "\(scheme)\(newAuth)\(pathAndQuery)"
   }
 
-  // 1. Sửa hàm updateLayout
-func updateLayout(bounds: CGRect) {
+  func updateLayout(bounds: CGRect) {
     guard let containerView = containerView, bounds.width > 0, bounds.height > 0 else { return }
     for subview in containerView.subviews {
-        subview.frame = bounds
-        subview.setNeedsLayout()
-        subview.layoutIfNeeded()
+      subview.frame = bounds
     }
-}
+  }
 
-// 2. Sửa hàm load: Tăng caching lên 3000ms
-func load(url: String, options: [String] = []) {
+  func load(url: String, options: [String] = [], headers: [String: String]? = nil) {
     player.stop()
     player.media = nil
 
@@ -87,12 +83,21 @@ func load(url: String, options: [String] = []) {
     media.addOption(":clock-jitter=0")
     media.addOption(":clock-synchro=0")
 
+    if let h = headers {
+      if let ua = h["User-Agent"] {
+        media.addOption(":http-user-agent=\(ua)")
+      }
+      if let ref = h["Referer"] {
+        media.addOption(":http-referrer=\(ref)")
+      }
+    }
+
     #if targetEnvironment(simulator)
     media.addOption(":avcodec-hw=none")
     #endif
 
     player.media = media
-}
+  }
 
   func play()   { player.play() }
   func pause()  { player.pause() }
@@ -185,10 +190,25 @@ func load(url: String, options: [String] = []) {
     // We invoke it and then verify file existence to determine success.
     player.saveVideoSnapshot(at: url.path, withWidth: 0, andHeight: 0)
 
-    if FileManager.default.fileExists(atPath: url.path) {
-      completion(url.path)
-    } else {
-      completion(nil)
+    var attempts = 0
+    let maxAttempts = 20
+    let delay = 0.05 // 50ms
+
+    func checkFile() {
+      if FileManager.default.fileExists(atPath: url.path) {
+        completion(url.path)
+      } else if attempts < maxAttempts {
+        attempts += 1
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+          checkFile()
+        }
+      } else {
+        completion(nil)
+      }
+    }
+
+    DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+      checkFile()
     }
   }
 

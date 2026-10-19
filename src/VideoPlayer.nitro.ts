@@ -56,6 +56,7 @@ export interface VideoPlayerProps extends HybridViewProps {
   progressInterval: number // ms, default 500
   zoomEnabled: boolean // Enable pinch-to-zoom
   isLive: boolean // If true, optimizes for low-latency live streaming (reduces buffers, disables auto-wait on stall)
+  headers?: Record<string, string>
 
   // Callbacks
   onReady?: (event: ReadyEvent) => void

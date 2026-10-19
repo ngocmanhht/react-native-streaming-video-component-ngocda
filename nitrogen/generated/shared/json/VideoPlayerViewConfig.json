@@ -14,6 +14,7 @@
     "progressInterval": true,
     "zoomEnabled": true,
     "isLive": true,
+    "headers": true,
     "onReady": true,
     "onProgress": true,
     "onBuffering": true,

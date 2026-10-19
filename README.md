@@ -116,8 +116,11 @@ For full usage examples: 👉 **[Usage Guide](usage.md)**
 
 | Prop | Type | Default | Description |
 |:-----|:-----|:--------|:------------|
-| `url` | `string` | **required** | Stream URL. Supports `rtsp://`, `rtmp://`, `https://…m3u8`, `https://…mp4` |
+| `url` | `string` | **required** (or `source`) | Stream URL (`rtsp://`, `rtmp://`, `https://…m3u8`, `https://…mp4`) |
+| `source` | `string \| { uri?: string }` | — | Alias for `url`. Supports string URL or `{ uri: '...' }` object |
 | `streamProtocol` | `'hls' \| 'rtsp' \| 'rtmp' \| 'mp4'` | `'hls'` | Hint for the routing engine. Auto-detected from URL if possible |
+| `headers` | `Record<string, string>` | `DEFAULT_HEADERS` | Custom HTTP headers. Defaults to `cloudcam.vn` Referer, Origin & User-Agent |
+| `isLive` | `boolean` | `false` | Optimizes for low-latency live streaming (reduces buffers, hides seek controls) |
 | `paused` | `boolean` | `false` | Controlled playback state |
 | `volume` | `number` | `1.0` | Initial volume `0.0 – 1.0` |
 | `muted` | `boolean` | `true` | Initial muted state |
@@ -141,6 +144,34 @@ For full usage examples: 👉 **[Usage Guide](usage.md)**
 
 ---
 
+## 🌐 Custom HTTP Headers
+
+By default, all HTTP/HLS streams automatically use default headers configured for `cloudcam.vn`:
+
+```ts
+export const DEFAULT_HEADERS: Record<string, string> = {
+  'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) ...',
+  'Referer': 'https://cloudcam.vn/',
+  'Origin': 'https://cloudcam.vn',
+};
+```
+
+You can customize or override headers via the `headers` prop:
+
+```tsx
+<VideoPlayer
+  url="https://your-domain.com/stream.m3u8"
+  headers={{
+    'Authorization': 'Bearer YOUR_AUTH_TOKEN',
+    'User-Agent': 'CustomApp/2.0',
+    'Referer': 'https://your-domain.com/',
+  }}
+  showControls
+/>
+```
+
+---
+
 ## 📐 Playback States
 
 ```ts
@@ -152,28 +183,8 @@ type PlaybackState =
   | 'paused'        // Manually paused
   | 'buffering'     // Waiting for data (network stall)
   | 'reconnecting'  // Stream dropped, auto-reconnect backoff active
-  | 'error'         // Unrecoverable error
+  | 'error'         // Error encountered
   | 'ended'         // Stream finished
-```sition update |
-| `onBuffering` | `(isBuffering: boolean) => void` | — | Buffering state change |
-| `onStateChange` | `(state: PlaybackState) => void` | — | Player lifecycle state change |
-| `onError` | `(event: ErrorEvent) => void` | — | Playback error |
-| `onEnd` | `() => void` | — | Stream ended |
-
----
-
-## 📐 Playback States
-
-```ts
-type PlaybackState =
-  | 'idle'       // No media loaded
-  | 'loading'    // URL set, native player initializing
-  | 'ready'      // First frame decoded, can play
-  | 'playing'    // Active playback
-  | 'paused'     // Manually paused
-  | 'buffering'  // Waiting for data (network stall)
-  | 'error'      // Unrecoverable error
-  | 'ended'      // Stream finished
 ```
 
 ---

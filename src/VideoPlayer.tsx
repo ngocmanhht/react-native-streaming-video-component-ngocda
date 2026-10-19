@@ -1,10 +1,13 @@
 import React, { useCallback, useEffect, useState, useRef, type FC, type RefObject } from 'react'
 import {
-  Modal,
+  AppState,
   StatusBar,
   StyleSheet,
   View,
   Text,
+  Platform,
+  Dimensions,
+  Modal,
   type StyleProp,
   type ViewStyle,
 } from 'react-native'
@@ -29,6 +32,15 @@ import type {
 import VideoPlayerViewConfig from '../nitrogen/generated/shared/json/VideoPlayerViewConfig.json'
 import { VideoControls, type ControlIcons } from './VideoControls'
 import { useVideoPlayer } from './useVideoPlayer'
+
+// ─── Default Headers ─────────────────────────────────────────────────────────
+
+export const DEFAULT_HEADERS: Record<string, string> = {
+  'User-Agent':
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+  'Referer': 'https://cloudcam.vn/',
+  'Origin': 'https://cloudcam.vn',
+}
 
 // ─── Native wrapper ───────────────────────────────────────────────────────────
 
@@ -91,6 +103,9 @@ export interface VideoPlayerPublicProps extends Omit<
 
   /** Callback when screenshot is taken. Returns the file path. */
   onCapture?: (path: string) => void
+
+  /** Custom HTTP headers for video streaming. Defaults to cloudcam.vn */
+  headers?: Record<string, string>
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -111,6 +126,7 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
   showCameraButton = false,
   onCapture,
   isLive = false,
+  headers: propHeaders = DEFAULT_HEADERS,
 
   // Extract user callbacks explicitly to avoid them overriding or blocking internal state updates
   onReady: userOnReady,
@@ -122,6 +138,10 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
 
   ...nativeProps
 }) => {
+  const resolvedHeaders = React.useMemo(() => {
+    return { ...DEFAULT_HEADERS, ...(propHeaders || {}) }
+  }, [propHeaders])
+
   // Resolve raw stream URL string from either `url` or `source` prop
   const rawUrl =
     propUrl ||
@@ -138,6 +158,7 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
     play,
     pause,
     stop,
+    seekTo,
     seekBy,
     setVolume,
     toggleMute,
@@ -164,7 +185,26 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
     else play()
   }, [externalPaused, pause, play])
 
-
+  // App lifecycle management (pause in background, resume when active)
+  const wasPlayingBeforeBackground = useRef(false)
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (nextAppState === 'background' || nextAppState === 'inactive') {
+        if (!state.paused && state.playbackState === 'playing') {
+          wasPlayingBeforeBackground.current = true
+          pause()
+        }
+      } else if (nextAppState === 'active') {
+        if (wasPlayingBeforeBackground.current) {
+          wasPlayingBeforeBackground.current = false
+          play()
+        }
+      }
+    })
+    return () => {
+      subscription.remove()
+    }
+  }, [state.paused, state.playbackState, pause, play])
 
   // ── Ref Management ───────────────────────────────────────────────────────
   // We use a callback ref to ensure internalRef is always set (for useVideoPlayer logic)
@@ -185,52 +225,75 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
   )
 
   const [isFullscreen, setIsFullscreen] = useState(false)
-  const [readyFullscreen, setReadyFullscreen] = useState(false)
+  const [, setReadyFullscreen] = useState(false)
   const [currentZoom, setCurrentZoom] = useState(1)
   const [showZoomBadge, setShowZoomBadge] = useState(false)
+  const [showShutterFlash, setShowShutterFlash] = useState(false)
   const zoomTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingSeekAfterRemount = useRef<number | null>(null)
 
   // ── Orientation Management ────────────────────────────────────────────────
   useEffect(() => {
-    try {
-      if (isFullscreen) {
-        Orientation.unlockAllOrientations()
-        Orientation.lockToLandscape()
+    if (Platform.OS === 'ios') {
+      try {
+        if (isFullscreen) {
+          Orientation.unlockAllOrientations()
+          Orientation.lockToLandscape()
 
-        setTimeout(() => {
-          setReadyFullscreen(true)
-        }, 500)
+          setTimeout(() => {
+            setReadyFullscreen(true)
+          }, 500)
+        } else {
+          setReadyFullscreen(false)
+
+          Orientation.unlockAllOrientations()
+          Orientation.lockToPortrait()
+        }
+      } catch (e) {
+        console.warn('Orientation error:', e)
+      }
+    } else {
+      // Android: Do not lock orientation physically to avoid rotating the entire MainActivity.
+      if (isFullscreen) {
+        setReadyFullscreen(true)
       } else {
         setReadyFullscreen(false)
-
-        Orientation.unlockAllOrientations()
-        Orientation.lockToPortrait()
       }
-    } catch (e) {
-      console.warn('Orientation error:', e)
     }
 
     return () => {
-      try {
-        Orientation.unlockAllOrientations()
-        Orientation.lockToPortrait()
-      } catch (e) {
-        console.warn('Orientation error:', e)
+      if (Platform.OS === 'ios') {
+        try {
+          Orientation.unlockAllOrientations()
+          Orientation.lockToPortrait()
+        } catch (e) {
+          console.warn('Orientation error:', e)
+        }
       }
     }
   }, [isFullscreen])
 
   const toggleFullscreen = useCallback(() => {
+    if (!isLive && state.currentTime > 0) {
+      pendingSeekAfterRemount.current = state.currentTime
+    }
     setIsFullscreen(fs => !fs)
-  }, [])
+  }, [isLive, state.currentTime])
 
   // ── Unified Callback Handlers (Fires both internal state and user callbacks) ──
   const handleReady = useCallback(
     (event: ReadyEvent) => {
       onReady(event)
       userOnReady?.(event)
+      if (!isLive && pendingSeekAfterRemount.current !== null && pendingSeekAfterRemount.current > 0) {
+        const target = pendingSeekAfterRemount.current
+        pendingSeekAfterRemount.current = null
+        setTimeout(() => {
+          seekTo(target)
+        }, 150)
+      }
     },
-    [onReady, userOnReady],
+    [onReady, userOnReady, isLive, seekTo],
   )
 
   const handleProgress = useCallback(
@@ -280,6 +343,7 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
         state={state}
         streamProtocol={protocol}
         isFullscreen={isFullscreen}
+        isLive={isLive}
         seekInterval={seekInterval}
         icons={icons}
         onPlay={play}
@@ -292,6 +356,10 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
         showCameraButton={showCameraButton}
         onCapture={async () => {
           try {
+            setShowShutterFlash(true)
+            setTimeout(() => {
+              setShowShutterFlash(false)
+            }, 150)
             const path = await takeScreenshot()
             onCapture?.(path)
           } catch (e) {
@@ -306,6 +374,7 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
       key={`${streamProtocol}-${rawUrl}`}
       hybridRef={callback(handleHybridRef)}
       url={rawUrl}
+      headers={resolvedHeaders}
       streamProtocol={streamProtocol}
       paused={state.paused}
       volume={state.isMuted ? 0 : state.volume}
@@ -325,9 +394,27 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
 
   const controlsEl = renderControls(streamProtocol)
 
-  const containerStyle = isFullscreen ? styles.fullscreenContainer : [styles.container, style]
+  const { width: W, height: H } = Dimensions.get('window')
+  const screenWidth = Math.min(W, H)
+  const screenHeight = Math.max(W, H)
 
-  return (
+  const containerStyle = isFullscreen
+    ? Platform.OS === 'android'
+      ? [
+          styles.fullscreenContainer,
+          {
+            width: screenHeight,
+            height: screenWidth,
+            position: 'absolute' as const,
+            top: (screenHeight - screenWidth) / 2,
+            left: (screenWidth - screenHeight) / 2,
+            transform: [{ rotate: '90deg' }],
+          },
+        ]
+      : styles.fullscreenContainer
+    : [styles.container, style]
+
+  const playerComponent = (
     <GestureHandlerRootView style={containerStyle}>
       <StatusBar hidden={isFullscreen} animated />
       <View style={StyleSheet.absoluteFill}>
@@ -348,6 +435,12 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
           }}
         />
       </View>
+      {showShutterFlash && (
+        <View
+          style={[StyleSheet.absoluteFill, styles.shutterFlash]}
+          pointerEvents="none"
+        />
+      )}
       {isFullscreen && showZoomBadge && currentZoom > 1.05 && (
         <View style={styles.zoomBadge}>
           <Text style={styles.zoomBadgeText}>{currentZoom.toFixed(1)}x</Text>
@@ -355,6 +448,29 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
       )}
     </GestureHandlerRootView>
   )
+
+  if (isFullscreen) {
+    return (
+      <Modal
+        visible={true}
+        transparent={false}
+        statusBarTranslucent
+        animationType="none"
+        supportedOrientations={[
+          'portrait',
+          'portrait-upside-down',
+          'landscape',
+          'landscape-left',
+          'landscape-right',
+        ]}
+        onRequestClose={toggleFullscreen}
+      >
+        {playerComponent}
+      </Modal>
+    )
+  }
+
+  return playerComponent
 }
 
 const ZoomableView: FC<{
@@ -468,24 +584,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#000',
     justifyContent: 'center',
-    minHeight: 200,
     overflow: 'hidden',
     width: '100%',
   },
   fullscreenContainer: {
     alignItems: 'center',
     backgroundColor: '#000',
-    bottom: 0,
+    flex: 1,
+    height: '100%',
     justifyContent: 'center',
-    left: 0,
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    zIndex: 99999,
+    width: '100%',
   },
   playerNativeStyle: {
     height: '100%',
     width: '100%',
+  },
+  shutterFlash: {
+    backgroundColor: '#fff',
+    opacity: 0.8,
   },
   zoomBadge: {
     backgroundColor: 'rgba(0,0,0,0.6)',

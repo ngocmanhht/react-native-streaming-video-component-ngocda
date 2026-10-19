@@ -27,9 +27,10 @@ namespace margelo::nitro::streamingvideo { struct ErrorEvent; }
 #include "JStreamProtocol.hpp"
 #include "ResizeMode.hpp"
 #include "JResizeMode.hpp"
+#include <unordered_map>
+#include <optional>
 #include "ReadyEvent.hpp"
 #include <functional>
-#include <optional>
 #include "JFunc_void_ReadyEvent.hpp"
 #include <NitroModules/JNICallable.hpp>
 #include "JReadyEvent.hpp"
@@ -169,6 +170,28 @@ namespace margelo::nitro::streamingvideo {
   void JHybridVideoPlayerViewSpec::setIsLive(bool isLive) {
     static const auto method = _javaPart->javaClassStatic()->getMethod<void(jboolean /* isLive */)>("setLive");
     method(_javaPart, isLive);
+  }
+  std::optional<std::unordered_map<std::string, std::string>> JHybridVideoPlayerViewSpec::getHeaders() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<jni::JMap<jni::JString, jni::JString>>()>("getHeaders");
+    auto __result = method(_javaPart);
+    return __result != nullptr ? std::make_optional([&]() {
+      std::unordered_map<std::string, std::string> __map;
+      __map.reserve(__result->size());
+      for (const auto& __entry : *__result) {
+        __map.emplace(__entry.first->toStdString(), __entry.second->toStdString());
+      }
+      return __map;
+    }()) : std::nullopt;
+  }
+  void JHybridVideoPlayerViewSpec::setHeaders(const std::optional<std::unordered_map<std::string, std::string>>& headers) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<void(jni::alias_ref<jni::JMap<jni::JString, jni::JString>> /* headers */)>("setHeaders");
+    method(_javaPart, headers.has_value() ? [&]() -> jni::local_ref<jni::JMap<jni::JString, jni::JString>> {
+      auto __map = jni::JHashMap<jni::JString, jni::JString>::create(headers.value().size());
+      for (const auto& __entry : headers.value()) {
+        __map->put(jni::make_jstring(__entry.first), jni::make_jstring(__entry.second));
+      }
+      return __map;
+    }() : nullptr);
   }
   std::optional<std::function<void(const ReadyEvent& /* event */)>> JHybridVideoPlayerViewSpec::getOnReady() {
     static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<JFunc_void_ReadyEvent::javaobject>()>("getOnReady_cxx");

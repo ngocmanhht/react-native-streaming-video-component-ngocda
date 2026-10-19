@@ -19,9 +19,10 @@
 #include <string>
 #include "StreamProtocol.hpp"
 #include "ResizeMode.hpp"
+#include <unordered_map>
+#include <optional>
 #include "ReadyEvent.hpp"
 #include <functional>
-#include <optional>
 #include "ProgressEvent.hpp"
 #include "PlaybackState.hpp"
 #include "ErrorEvent.hpp"
@@ -58,6 +59,7 @@ namespace margelo::nitro::streamingvideo::views {
     CachedProp<double> progressInterval;
     CachedProp<bool> zoomEnabled;
     CachedProp<bool> isLive;
+    CachedProp<std::optional<std::unordered_map<std::string, std::string>>> headers;
     CachedProp<std::optional<std::function<void(const ReadyEvent& /* event */)>>> onReady;
     CachedProp<std::optional<std::function<void(const ProgressEvent& /* event */)>>> onProgress;
     CachedProp<std::optional<std::function<void(bool /* isBuffering */)>>> onBuffering;

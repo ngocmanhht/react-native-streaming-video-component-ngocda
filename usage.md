@@ -8,17 +8,18 @@ Complete API reference and examples for `react-native-streaming-video-component-
 
 1. [Basic HLS Playback](#1-basic-hls-playback)
 2. [RTSP IP Camera](#2-rtsp-ip-camera)
-3. [MP4 / VOD Playback](#3-mp4--vod-playback)
-4. [Controlled Mode (external paused prop)](#4-controlled-mode)
-5. [Programmatic Control via useVideoPlayer](#5-programmatic-control-via-usevideoplayer)
-6. [Frame Capture (Screenshot)](#6-frame-capture-screenshot)
-7. [Fullscreen & Zoom](#7-fullscreen--zoom)
-8. [Custom Icons](#8-custom-icons)
-9. [Listening to Playback Events](#9-listening-to-playback-events)
-10. [VideoPlayer Props Reference](#10-videoplayer-props-reference)
-11. [useVideoPlayer Hook Reference](#11-usevideoplayer-hook-reference)
-12. [Type Reference](#12-type-reference)
-13. [Performance Recommendations](#13-performance-recommendations)
+3. [Custom HTTP Headers & Default Domain](#3-custom-http-headers--default-domain)
+4. [MP4 / VOD Playback](#4-mp4--vod-playback)
+5. [Controlled Mode (external paused prop)](#5-controlled-mode)
+6. [Programmatic Control via useVideoPlayer](#6-programmatic-control-via-usevideoplayer)
+7. [Frame Capture (Screenshot)](#7-frame-capture-screenshot)
+8. [Fullscreen & Zoom](#8-fullscreen--zoom)
+9. [Custom Icons](#9-custom-icons)
+10. [Listening to Playback Events](#10-listening-to-playback-events)
+11. [VideoPlayer Props Reference](#11-videoplayer-props-reference)
+12. [useVideoPlayer Hook Reference](#12-usevideoplayer-hook-reference)
+13. [Type Reference](#13-type-reference)
+14. [Performance Recommendations](#14-performance-recommendations)
 
 ---
 
@@ -61,7 +62,42 @@ RTSP streams bypass ExoPlayer's broken digest-auth implementation and go directl
 
 ---
 
-## 3. MP4 / VOD Playback
+## 3. Custom HTTP Headers & Default Domain
+
+By default, the player includes default headers configured for `cloudcam.vn`:
+
+```ts
+import { DEFAULT_HEADERS } from 'react-native-streaming-video-component-ngocda';
+// DEFAULT_HEADERS contains:
+// - 'User-Agent': Mozilla/5.0 ...
+// - 'Referer': 'https://cloudcam.vn/'
+// - 'Origin': 'https://cloudcam.vn'
+```
+
+You can pass custom headers or override existing ones via the `headers` prop:
+
+```tsx
+<VideoPlayer
+  url="https://example.com/live/secure_stream.m3u8"
+  streamProtocol="hls"
+  headers={{
+    'Authorization': 'Bearer YOUR_ACCESS_TOKEN',
+    'Custom-Header': 'CustomValue',
+  }}
+  showControls
+  style={{ width: '100%', height: 220 }}
+/>
+```
+
+Native handling:
+- **Android (ExoPlayer Media3)**: Configures `DefaultHttpDataSource.Factory().setDefaultRequestProperties(headers)`.
+- **Android (LibVLC)**: Passes `:http-user-agent` and `:http-referrer`.
+- **iOS (AVPlayer)**: Passes `AVURLAssetHTTPHeaderFieldsKey` to `AVURLAsset`.
+- **iOS (MobileVLCKit)**: Passes `:http-user-agent` and `:http-referrer`.
+
+---
+
+## 4. MP4 / VOD Playback
 
 ```tsx
 <VideoPlayer
@@ -76,7 +112,7 @@ RTSP streams bypass ExoPlayer's broken digest-auth implementation and go directl
 
 ---
 
-## 4. Controlled Mode
+## 5. Controlled Mode
 
 When you pass the `paused` prop, the component enters **controlled mode** — your state fully drives playback.
 
@@ -105,13 +141,13 @@ export default function ControlledPlayer() {
 
 ---
 
-## 5. Programmatic Control via `useVideoPlayer`
+## 6. Programmatic Control via `useVideoPlayer`
 
 Use the `useVideoPlayer` hook to get a `playerRef` and imperative methods. Pass the ref to `<VideoPlayer>` via the `playerRef` prop.
 
 ```tsx
 import React from 'react';
-import { Button, View } from 'react-native';
+import { Button, View, Text } from 'react-native';
 import {
   VideoPlayer,
   useVideoPlayer,
@@ -150,7 +186,7 @@ export default function ProgrammaticControl() {
 
 ---
 
-## 6. Frame Capture (Screenshot)
+## 7. Frame Capture (Screenshot)
 
 Capture the current video frame as a JPEG file. Works on both iOS and Android.
 
@@ -204,7 +240,7 @@ return (
 
 ---
 
-## 7. Fullscreen & Zoom
+## 8. Fullscreen & Zoom
 
 Fullscreen is toggled by the expand icon in the control bar. When entering fullscreen:
 
@@ -231,7 +267,7 @@ Zoom is only active in fullscreen mode when `zoomEnabled={true}`:
 
 ---
 
-## 8. Custom Icons
+## 9. Custom Icons
 
 Override any or all control icons. Each icon component receives `{ size, color, strokeWidth }`:
 
@@ -262,7 +298,7 @@ const myIcons: ControlIcons = {
 
 ---
 
-## 9. Listening to Playback Events
+## 10. Listening to Playback Events
 
 ```tsx
 <VideoPlayer
@@ -278,7 +314,7 @@ const myIcons: ControlIcons = {
     console.log('Buffering:', isBuffering);
   }}
   onStateChange={(state) => {
-    // 'idle' | 'loading' | 'ready' | 'playing' | 'paused' | 'buffering' | 'error' | 'ended'
+    // 'idle' | 'loading' | 'ready' | 'playing' | 'paused' | 'buffering' | 'reconnecting' | 'error' | 'ended'
     console.log('Player state:', state);
   }}
   onError={({ code, message }) => {
@@ -293,14 +329,17 @@ const myIcons: ControlIcons = {
 
 ---
 
-## 10. VideoPlayer Props Reference
+## 11. VideoPlayer Props Reference
 
 ### Playback Props
 
 | Prop | Type | Default | Description |
 |:-----|:-----|:--------|:------------|
-| `source` | `string` | **required** | Stream URL (`rtsp://`, `https://…m3u8`, `https://…mp4`) |
-| `streamProtocol` | `'hls' \| 'rtsp' \| 'mp4'` | `'hls'` | Routing hint. Auto-detected from URL if unambiguous |
+| `url` | `string` | **required** (or `source`) | Stream URL (`rtsp://`, `rtmp://`, `https://…m3u8`, `https://…mp4`) |
+| `source` | `string \| { uri?: string }` | — | Alias for `url`. Supports string or `{ uri: '...' }` object |
+| `streamProtocol` | `'hls' \| 'rtsp' \| 'rtmp' \| 'mp4'` | `'hls'` | Routing hint. Auto-detected from URL if unambiguous |
+| `headers` | `Record<string, string>` | `DEFAULT_HEADERS` | Custom HTTP headers (defaults to `cloudcam.vn` Referer, Origin & User-Agent) |
+| `isLive` | `boolean` | `false` | Low-latency live stream mode (reduces buffers, hides seek controls) |
 | `paused` | `boolean` | `false` | Controlled playback state. Omit for uncontrolled mode |
 | `volume` | `number` | `1.0` | Initial volume `0.0 – 1.0` |
 | `muted` | `boolean` | `true` | Initial muted state |
@@ -339,7 +378,7 @@ const myIcons: ControlIcons = {
 
 ---
 
-## 11. `useVideoPlayer` Hook Reference
+## 12. `useVideoPlayer` Hook Reference
 
 ```ts
 const {
@@ -377,25 +416,26 @@ interface VideoPlayerState {
 
 ---
 
-## 12. Type Reference
+## 13. Type Reference
 
 ```ts
 // Stream protocol routing hint
-type StreamProtocol = 'hls' | 'rtsp' | 'mp4'
+type StreamProtocol = 'hls' | 'rtsp' | 'rtmp' | 'mp4'
 
 // Video scaling mode
 type ResizeMode = 'contain' | 'cover' | 'fill'
 
 // Player lifecycle
 type PlaybackState =
-  | 'idle'        // No media loaded
-  | 'loading'     // Initializing native player
-  | 'ready'       // First frame decoded
-  | 'playing'     // Active playback
-  | 'paused'      // Manually paused
-  | 'buffering'   // Waiting for data
-  | 'error'       // Unrecoverable error
-  | 'ended'       // Stream finished
+  | 'idle'          // No media loaded / stopped
+  | 'loading'       // Initializing native player
+  | 'ready'         // First frame decoded
+  | 'playing'       // Active playback
+  | 'paused'        // Manually paused
+  | 'buffering'     // Waiting for data
+  | 'reconnecting'  // Stream dropped, auto-reconnect backoff active
+  | 'error'         // Unrecoverable error
+  | 'ended'         // Stream finished
 
 // onReady payload
 interface ReadyEvent {
@@ -412,15 +452,17 @@ interface ProgressEvent {
 
 // onError payload
 interface ErrorEvent {
-  code:        number
-  message:     string
-  nativeError?: string
+  code:            number
+  message:         string
+  streamProtocol?: StreamProtocol
+  nativeError?:    string
+  recoverable?:    boolean
 }
 ```
 
 ---
 
-## 13. Performance Recommendations
+## 14. Performance Recommendations
 
 ### Concurrent stream limits
 

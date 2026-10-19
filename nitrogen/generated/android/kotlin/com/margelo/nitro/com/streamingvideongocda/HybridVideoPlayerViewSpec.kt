@@ -87,6 +87,12 @@ abstract class HybridVideoPlayerViewSpec: HybridView() {
   @set:Keep
   abstract var isLive: Boolean
   
+  @get:DoNotStrip
+  @get:Keep
+  @set:DoNotStrip
+  @set:Keep
+  abstract var headers: Map<String, String>?
+  
   abstract var onReady: ((event: ReadyEvent) -> Unit)?
   
   private var onReady_cxx: Func_void_ReadyEvent?

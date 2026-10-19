@@ -33,6 +33,7 @@ export interface VideoPlayerProps extends HybridViewProps {
     progressInterval: number;
     zoomEnabled: boolean;
     isLive: boolean;
+    headers?: Record<string, string>;
     onReady?: (event: ReadyEvent) => void;
     onProgress?: (event: ProgressEvent) => void;
     onBuffering?: (isBuffering: boolean) => void;

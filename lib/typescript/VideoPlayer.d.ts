@@ -2,6 +2,7 @@ import { type FC, type RefObject } from 'react';
 import { type StyleProp, type ViewStyle } from 'react-native';
 import type { VideoPlayerProps, VideoPlayerView } from './VideoPlayer.nitro';
 import { type ControlIcons } from './VideoControls';
+export declare const DEFAULT_HEADERS: Record<string, string>;
 export interface VideoPlayerPublicProps extends Omit<Partial<VideoPlayerProps>, 'paused' | 'volume' | 'muted' | 'zoomEnabled' | 'url'> {
     /** Stream URL */
     url?: string;
@@ -41,6 +42,8 @@ export interface VideoPlayerPublicProps extends Omit<Partial<VideoPlayerProps>, 
     showCameraButton?: boolean;
     /** Callback when screenshot is taken. Returns the file path. */
     onCapture?: (path: string) => void;
+    /** Custom HTTP headers for video streaming. Defaults to cloudcam.vn */
+    headers?: Record<string, string>;
 }
 export declare const VideoPlayer: FC<VideoPlayerPublicProps>;
 //# sourceMappingURL=VideoPlayer.d.ts.map

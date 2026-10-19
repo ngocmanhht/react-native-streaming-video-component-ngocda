@@ -122,6 +122,11 @@ using namespace margelo::nitro::streamingvideo::views;
     swiftPart.setIsLive(newViewProps.isLive.value);
     newViewProps.isLive.isDirty = false;
   }
+  // headers: optional
+  if (newViewProps.headers.isDirty) {
+    swiftPart.setHeaders(newViewProps.headers.value);
+    newViewProps.headers.isDirty = false;
+  }
   // onReady: optional
   if (newViewProps.onReady.isDirty) {
     swiftPart.setOnReady(newViewProps.onReady.value);

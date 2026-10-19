@@ -44,6 +44,12 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
   private var vlcBridge: VLCPlayerBridge?
   private var activeProtocol: StreamProtocol = .hls
   private var useVlcFallback = false
+  private var avFallbackWorkItem: DispatchWorkItem?
+
+  private func cancelAVFallbackTimer() {
+    avFallbackWorkItem?.cancel()
+    avFallbackWorkItem = nil
+  }
 
   // MARK: - Init
 
@@ -51,11 +57,6 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
     super.init()
     DispatchQueue.main.async { [weak self] in
       guard let self = self else { return }
-      self.avBridge = AVPlayerBridge()
-      self.vlcBridge = VLCPlayerBridge()
-      self.bindAVBridge()
-      self.bindVLCBridge()
-      
       // If a URL was set before main-thread initialization completed, load it now
       if !self.url.isEmpty {
         self.reloadPlayer()
@@ -67,9 +68,21 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
 
   var url: String = "" {
     didSet {
-      guard url != oldValue, !url.isEmpty else { return }
+      guard url != oldValue else { return }
+      retryCount = 0
+      reconnectWorkItem?.cancel()
       DispatchQueue.main.async { [weak self] in
-        self?.reloadPlayer()
+        guard let self = self else { return }
+        if self.url.isEmpty {
+          self.avBridge?.stop()
+          self.vlcBridge?.stop()
+          for subview in self.containerView.subviews {
+            subview.removeFromSuperview()
+          }
+          self.onStateChange?(.idle)
+          return
+        }
+        self.reloadPlayer()
       }
     }
   }
@@ -152,6 +165,15 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
     }
   }
 
+  var headers: Dictionary<String, String>? = nil {
+    didSet {
+      guard headers != oldValue else { return }
+      DispatchQueue.main.async { [weak self] in
+        self?.reloadPlayer()
+      }
+    }
+  }
+
 
   // MARK: - Callbacks
 
@@ -214,6 +236,7 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
       activeProtocol = streamProtocol
     }
 
+    cancelAVFallbackTimer()
     useVlcFallback = false
     onStateChange?(.loading)
 
@@ -227,12 +250,18 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
   }
 
   private func loadAVPlayer(isLiveStream: Bool) {
+    cancelAVFallbackTimer()
     vlcBridge?.detach()
+    vlcBridge = nil
     for subview in containerView.subviews {
       subview.removeFromSuperview()
     }
+    if avBridge == nil {
+      avBridge = AVPlayerBridge()
+      bindAVBridge()
+    }
     avBridge?.attach(to: containerView)
-    avBridge?.load(url: url, isLiveStream: isLiveStream)
+    avBridge?.load(url: url, isLiveStream: isLiveStream, headers: headers)
     if !paused {
       avBridge?.play()
     }
@@ -240,13 +269,18 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
 
   private func loadVlc() {
     avBridge?.detach()
+    avBridge = nil
     for subview in containerView.subviews {
       subview.removeFromSuperview()
     }
     containerView.setNeedsLayout()
     containerView.layoutIfNeeded()
+    if vlcBridge == nil {
+      vlcBridge = VLCPlayerBridge()
+      bindVLCBridge()
+    }
     vlcBridge?.attach(to: containerView)
-    vlcBridge?.load(url: url)
+    vlcBridge?.load(url: url, headers: headers)
     if !paused { vlcBridge?.play() }
   }
 
@@ -263,7 +297,7 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
     case .rtsp, .rtmp:
       if _rtspNeedsReconnect {
         _rtspNeedsReconnect = false
-        vlcBridge?.load(url: url)
+        vlcBridge?.load(url: url, headers: headers)
         vlcBridge?.play()
       } else {
         vlcBridge?.play()
@@ -291,6 +325,7 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
   func play()  throws { paused = false }
   func pause() throws { paused = true }
   func stop()  throws {
+    cancelAVFallbackTimer()
     DispatchQueue.main.async { [weak self] in
       guard let self = self else { return }
       self.avBridge?.stop()
@@ -434,6 +469,8 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
   private func bindAVBridge() {
     avBridge?.onReady = { [weak self] duration, size in
       guard let self = self else { return }
+      self.cancelAVFallbackTimer()
+      self.retryCount = 0
       self.onReady?(.init(
         duration: duration,
         naturalSize: .init(width: Double(size.width), height: Double(size.height))
@@ -445,7 +482,9 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
       }
     }
     avBridge?.onProgress = { [weak self] current, total, playable in
-      self?.onProgress?(.init(currentTime: current, duration: total, playableDuration: playable))
+      guard let self = self else { return }
+      self.cancelAVFallbackTimer()
+      self.onProgress?(.init(currentTime: current, duration: total, playableDuration: playable))
     }
     avBridge?.onBuffering = { [weak self] isBuffering in
       guard let self = self else { return }
@@ -458,6 +497,7 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
     }
     avBridge?.onError = { [weak self] code, message in
       guard let self = self else { return }
+      self.cancelAVFallbackTimer()
       if (self.activeProtocol == .hls || self.activeProtocol == .mp4) && !self.useVlcFallback {
         print("StreamingVideo: AVPlayer failed with code \(code) (\(message)), falling back to VLCPlayer")
         self.useVlcFallback = true
@@ -478,6 +518,7 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
   private func bindVLCBridge() {
     vlcBridge?.onReady = { [weak self] duration, _ in
       guard let self = self else { return }
+      self.retryCount = 0
       self.onReady?(.init(
         duration: duration,
         naturalSize: .init(width: 0, height: 0)
@@ -503,7 +544,7 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
     vlcBridge?.onError = { [weak self] code, message in
       guard let self = self else { return }
       self.onError?(.init(code: Double(code), message: message, streamProtocol: self.activeProtocol, nativeError: nil, recoverable: true))
-      if self.activeProtocol == .rtsp || self.activeProtocol == .rtmp {
+      if self.activeProtocol == .rtsp || self.activeProtocol == .rtmp || self.activeProtocol == .hls {
         self.scheduleReconnect()
       } else {
         self.onStateChange?(.error)
@@ -511,7 +552,7 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
     }
     vlcBridge?.onEnd = { [weak self] in
       guard let self = self else { return }
-      if (self.activeProtocol == .rtsp || self.activeProtocol == .rtmp) && self.paused {
+      if (self.activeProtocol == .rtsp || self.activeProtocol == .rtmp || self.activeProtocol == .hls) && self.paused {
         self._rtspNeedsReconnect = true
       }
       self.onEnd?()

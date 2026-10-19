@@ -81,7 +81,16 @@ class HybridVideoPlayerView(private val ctx: ReactContext)
     // Exponential backoff reconnect
     private var retryCount = 0
     private val maxRetries = 5
-    private val reconnectHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val reconnectHandler = mainHandler
+    private var vlcVideoLayout: VLCVideoLayout? = null
+    private fun runOnMain(block: () -> Unit) {
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+            block()
+        } else {
+            mainHandler.post(block)
+        }
+    }
     private val reconnectRunnable = Runnable {
         if (!paused && !url.isEmpty()) {
             onStateChange?.invoke(PlaybackState.RECONNECTING)
@@ -92,10 +101,17 @@ class HybridVideoPlayerView(private val ctx: ReactContext)
     override var url: String = ""
         set(value) {
             Log.d("StreamingVideo", "setUrl: ${SecurityUtils.sanitizeUrl(value)}")
-            if (value == field || value.isEmpty()) return
+            if (value == field) return
             field = value
             retryCount = 0
             reconnectHandler.removeCallbacks(reconnectRunnable)
+            if (value.isEmpty()) {
+                exo.stop()
+                vlc.stop()
+                rootLayout.removeAllViews()
+                onStateChange?.invoke(PlaybackState.IDLE)
+                return
+            }
             reloadPlayer()
         }
 
@@ -164,6 +180,13 @@ class HybridVideoPlayerView(private val ctx: ReactContext)
             reloadPlayer()
         }
 
+    override var headers: Map<String, String>? = null
+        set(value) {
+            if (value == field) return
+            field = value
+            reloadPlayer()
+        }
+
     // ── Player lifecycle ─────────────────────────────────────────────────────
 
     private fun reloadPlayer() {
@@ -211,97 +234,71 @@ class HybridVideoPlayerView(private val ctx: ReactContext)
     }
 
     private fun loadExo() {
-        Log.d("StreamingVideo", "loadExo: url=$url")
-        // Stop VLC and clear its view before switching
-        vlc.stop()
-        rootLayout.removeAllViews()
-        rootLayout.addView(
-            exo.view,
-            FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
+        runOnMain {
+            Log.d("StreamingVideo", "loadExo: url=${SecurityUtils.sanitizeUrl(url)}")
+            // Stop VLC and clear its view before switching
+            vlc.stop()
+            vlcVideoLayout = null
+            rootLayout.removeAllViews()
+            rootLayout.addView(
+                exo.view,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
             )
-        )
-        rootLayout.requestLayout()
-        exo.isLive = isLive
-        exo.load(url)
-        exo.setResizeMode(resizeMode)
-        if (!paused) {
-            Log.d("StreamingVideo", "loadExo -> calling exo.play() immediately")
-            exo.play()
+            rootLayout.requestLayout()
+            exo.isLive = isLive
+            exo.load(url, headers)
+            exo.setResizeMode(resizeMode)
+            if (!paused) {
+                Log.d("StreamingVideo", "loadExo -> calling exo.play() immediately")
+                exo.play()
+            }
         }
     }
 
-    // private fun loadVlc() {
-    //     Log.d("StreamingVideo", "loadVlc: url=$url")
-    //     // Stop ExoPlayer and clear its view before switching
-    //     exo.stop()
-    //     rootLayout.removeAllViews()
-    //     val activity = ctx.currentActivity ?: ctx
-    //     val vlcLayout = VLCVideoLayout(activity)
-    //     vlcLayout.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-    //         val w = vlcLayout.width
-    //         val h = vlcLayout.height
-    //         if (w > 0 && h > 0) {
-    //             for (i in 0 until vlcLayout.childCount) {
-    //                 val child = vlcLayout.getChildAt(i)
-    //                 child.post {
-    //                     child.measure(
-    //                         android.view.View.MeasureSpec.makeMeasureSpec(w, android.view.View.MeasureSpec.EXACTLY),
-    //                         android.view.View.MeasureSpec.makeMeasureSpec(h, android.view.View.MeasureSpec.EXACTLY)
-    //                     )
-    //                     child.layout(0, 0, w, h)
-    //                 }
-    //             }
-    //         }
-    //     }
-    //     rootLayout.addView(
-    //         vlcLayout,
-    //         FrameLayout.LayoutParams(
-    //             FrameLayout.LayoutParams.MATCH_PARENT,
-    //             FrameLayout.LayoutParams.MATCH_PARENT
-    //         )
-    //     )
-    //     rootLayout.requestLayout()
+    private fun loadVlc() {
+        runOnMain {
+            Log.d("StreamingVideo", "loadVlc: url=${SecurityUtils.sanitizeUrl(url)}")
+            exo.stop()
+            vlc.stop()
 
-    //     // Wait for UI looper to perform initial layout pass so SurfaceView/TextureView is valid
-    //     vlcLayout.post {
-    //         vlc.attachSurface(vlcLayout)
-    //         vlc.load(url)
-    //         if (!paused) {
-    //             Log.d("StreamingVideo", "loadVlc -> calling vlc.play() after layout post")
-    //             vlc.play()
-    //         }
-    //     }
-    // }
-    // HybridVideoPlayerView.kt
-private fun loadVlc() {
-    Log.d("StreamingVideo", "loadVlc: url=$url")
-    exo.stop()
-    rootLayout.removeAllViews()
-    
-    val activity = ctx.currentActivity ?: ctx
-    val vlcLayout = VLCVideoLayout(activity)
-    
-    // Gán MATCH_PARENT chắc chắn cho Layout Container
-    rootLayout.addView(
-        vlcLayout,
-        FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT,
-            FrameLayout.LayoutParams.MATCH_PARENT
-        )
-    )
-    rootLayout.requestLayout()
+            var layout = vlcVideoLayout
+            if (layout == null || layout.parent != rootLayout) {
+                rootLayout.removeAllViews()
+                val activity = ctx.currentActivity ?: ctx
+                val newLayout = VLCVideoLayout(activity)
 
-    // Chờ UI Thread hoàn tất layout pass đầu tiên trước khi attach surface
-    vlcLayout.post {
-        vlc.attachSurface(vlcLayout)
-        vlc.load(url)
-        if (!paused) {
-            vlc.play()
+                // Gán MATCH_PARENT chắc chắn cho Layout Container
+                rootLayout.addView(
+                    newLayout,
+                    FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        FrameLayout.LayoutParams.MATCH_PARENT
+                    )
+                )
+                rootLayout.requestLayout()
+                vlcVideoLayout = newLayout
+                layout = newLayout
+
+                // Chờ UI Thread hoàn tất layout pass đầu tiên trước khi attach surface
+                layout.post {
+                    vlc.attachSurface(layout)
+                    vlc.load(url, headers)
+                    if (!paused) {
+                        vlc.play()
+                    }
+                }
+            } else {
+                // Tái sử dụng layout đã có, không hủy SurfaceTexture để tránh crash GPU driver
+                vlc.load(url, headers)
+                if (!paused) {
+                    vlc.play()
+                }
+            }
         }
     }
- }
 
     private fun activePlay() {
         if (useVlcFallback) {
@@ -320,7 +317,9 @@ private fun loadVlc() {
     }
 
     private fun applyResizeMode() {
-        exo.setResizeMode(resizeMode)
+        runOnMain {
+            exo.setResizeMode(resizeMode)
+        }
     }
 
     // ── Methods ──────────────────────────────────────────────────────────────
@@ -328,9 +327,11 @@ private fun loadVlc() {
     override fun play()  { paused = false }
     override fun pause() { paused = true }
     override fun stop()  {
-        exo.stop()
-        vlc.stop()
-        onStateChange?.invoke(PlaybackState.IDLE)
+        runOnMain {
+            exo.stop()
+            vlc.stop()
+            onStateChange?.invoke(PlaybackState.IDLE)
+        }
     }
 
     override fun seekTo(positionSeconds: Double): Promise<Unit> {
@@ -382,6 +383,7 @@ private fun loadVlc() {
 
     private fun bindExo() {
         exo.onReady = { dur ->
+            retryCount = 0
             Log.d("StreamingVideo", "ExoPlayer onReady: durationMs=$dur")
             onReady?.invoke(ReadyEvent(if (dur < 0) -1.0 else dur / 1000.0, NaturalSize(0.0, 0.0)))
             onStateChange?.invoke(PlaybackState.READY)
@@ -429,6 +431,7 @@ private fun loadVlc() {
 
     private fun bindVlc() {
         vlc.onReady = { dur ->
+            retryCount = 0
             Log.d("StreamingVideo", "VlcPlayer onReady: durationMs=$dur")
             onReady?.invoke(ReadyEvent(if (dur < 0) -1.0 else dur / 1000.0, NaturalSize(0.0, 0.0)))
             onStateChange?.invoke(PlaybackState.READY)
@@ -479,6 +482,7 @@ private fun loadVlc() {
     override fun onDropView() {
         super.onDropView()
         reconnectHandler.removeCallbacks(reconnectRunnable)
+        vlcVideoLayout = null
         // Release in correct order to prevent JNI crash:
         // 1. Stop playback first
         // 2. Release ExoPlayer (releases codec + surface)

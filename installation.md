@@ -129,6 +129,28 @@ class MainActivity : ReactActivity() {
 > [!NOTE]
 > If you're using Expo (managed workflow), follow the [Expo Gesture Handler setup](https://docs.swmansion.com/react-native-gesture-handler/docs/fundamentals/installation/#expo) instead.
 
+### 4d. Proguard / R8 Rules (Release Builds)
+
+The library automatically packages `consumerProguardFiles "proguard-rules.pro"`. However, if your root app uses aggressive code shrinking/obfuscation (`minifyEnabled true`), ensure your `android/app/proguard-rules.pro` includes:
+
+```proguard
+# LibVLC (Native JNI & media playback)
+-keep class org.videolan.** { *; }
+-dontwarn org.videolan.**
+
+# AndroidX Media3 (ExoPlayer)
+-keep class androidx.media3.** { *; }
+-dontwarn androidx.media3.**
+
+# Nitro Modules & JNI Bridge
+-keep class com.margelo.nitro.** { *; }
+-keep class com.streamingvideongocda.** { *; }
+```
+
+### 4e. 16 KB Page Size Alignment (Android 15+)
+
+This library is pre-configured with `-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-z,max-page-size=16384` and `libvlc-all:3.6.5` to ensure full compliance with Android 15's 16 KB ELF memory page size requirement.
+
 ---
 
 ## Step 5 — Reanimated Babel Plugin

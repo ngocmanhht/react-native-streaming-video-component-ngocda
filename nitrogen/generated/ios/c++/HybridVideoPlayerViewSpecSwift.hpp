@@ -30,9 +30,10 @@ namespace margelo::nitro::streamingvideo { struct ErrorEvent; }
 #include <string>
 #include "StreamProtocol.hpp"
 #include "ResizeMode.hpp"
+#include <unordered_map>
+#include <optional>
 #include "ReadyEvent.hpp"
 #include <functional>
-#include <optional>
 #include "NaturalSize.hpp"
 #include "ProgressEvent.hpp"
 #include "PlaybackState.hpp"
@@ -147,6 +148,13 @@ namespace margelo::nitro::streamingvideo {
     }
     inline void setIsLive(bool isLive) noexcept override {
       _swiftPart.setIsLive(std::forward<decltype(isLive)>(isLive));
+    }
+    inline std::optional<std::unordered_map<std::string, std::string>> getHeaders() noexcept override {
+      auto __result = _swiftPart.getHeaders();
+      return __result;
+    }
+    inline void setHeaders(const std::optional<std::unordered_map<std::string, std::string>>& headers) noexcept override {
+      _swiftPart.setHeaders(headers);
     }
     inline std::optional<std::function<void(const ReadyEvent& /* event */)>> getOnReady() noexcept override {
       auto __result = _swiftPart.getOnReady();

@@ -29,9 +29,10 @@ namespace margelo::nitro::streamingvideo { struct ErrorEvent; }
 #include <string>
 #include "StreamProtocol.hpp"
 #include "ResizeMode.hpp"
+#include <unordered_map>
+#include <optional>
 #include "ReadyEvent.hpp"
 #include <functional>
-#include <optional>
 #include "ProgressEvent.hpp"
 #include "PlaybackState.hpp"
 #include "ErrorEvent.hpp"
@@ -84,6 +85,8 @@ namespace margelo::nitro::streamingvideo {
       virtual void setZoomEnabled(bool zoomEnabled) = 0;
       virtual bool getIsLive() = 0;
       virtual void setIsLive(bool isLive) = 0;
+      virtual std::optional<std::unordered_map<std::string, std::string>> getHeaders() = 0;
+      virtual void setHeaders(const std::optional<std::unordered_map<std::string, std::string>>& headers) = 0;
       virtual std::optional<std::function<void(const ReadyEvent& /* event */)>> getOnReady() = 0;
       virtual void setOnReady(const std::optional<std::function<void(const ReadyEvent& /* event */)>>& onReady) = 0;
       virtual std::optional<std::function<void(const ProgressEvent& /* event */)>> getOnProgress() = 0;

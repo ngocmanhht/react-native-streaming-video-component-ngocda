@@ -126,6 +126,16 @@ namespace margelo::nitro::streamingvideo::views {
         throw std::runtime_error(std::string("VideoPlayerView.isLive: ") + exc.what());
       }
     }()),
+    headers([&]() -> CachedProp<std::optional<std::unordered_map<std::string, std::string>>> {
+      try {
+        const react::RawValue* rawValue = rawProps.at("headers", nullptr, nullptr);
+        if (rawValue == nullptr) return sourceProps.headers;
+        const auto& [runtime, value] = (std::pair<jsi::Runtime*, jsi::Value>)*rawValue;
+        return CachedProp<std::optional<std::unordered_map<std::string, std::string>>>::fromRawValue(*runtime, value, sourceProps.headers);
+      } catch (const std::exception& exc) {
+        throw std::runtime_error(std::string("VideoPlayerView.headers: ") + exc.what());
+      }
+    }()),
     onReady([&]() -> CachedProp<std::optional<std::function<void(const ReadyEvent& /* event */)>>> {
       try {
         const react::RawValue* rawValue = rawProps.at("onReady", nullptr, nullptr);
@@ -209,6 +219,7 @@ namespace margelo::nitro::streamingvideo::views {
       case hashString("progressInterval"): return true;
       case hashString("zoomEnabled"): return true;
       case hashString("isLive"): return true;
+      case hashString("headers"): return true;
       case hashString("onReady"): return true;
       case hashString("onProgress"): return true;
       case hashString("onBuffering"): return true;

@@ -16,6 +16,16 @@ import com.margelo.nitro.com.streamingvideongocda.ResizeMode
 
 class ExoPlayerBridge(private val context: Context) {
 
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    private fun runOnMain(block: () -> Unit) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            block()
+        } else {
+            mainHandler.post(block)
+        }
+    }
+
     private var player: ExoPlayer? = null
     private val textureView = TextureView(context)
     private var videoWidth: Int = 0
@@ -24,6 +34,11 @@ class ExoPlayerBridge(private val context: Context) {
     private var currentVolume: Float = 1f
     private var isMuted: Boolean = false
     var isLive: Boolean = false
+
+    @Volatile
+    private var cachedPositionMs: Long = 0L
+    @Volatile
+    private var cachedDurationMs: Long = -1L
 
     init {
         textureView.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
@@ -45,7 +60,11 @@ class ExoPlayerBridge(private val context: Context) {
     private val progressRunnable = object : Runnable {
         override fun run() {
             player?.let {
-                onProgress?.invoke(it.currentPosition, it.duration)
+                val pos = it.currentPosition
+                val dur = it.duration
+                cachedPositionMs = pos
+                cachedDurationMs = dur
+                onProgress?.invoke(pos, dur)
                 textureView.postDelayed(this, progressIntervalMs)
             }
         }
@@ -56,76 +75,94 @@ class ExoPlayerBridge(private val context: Context) {
     private fun ensurePlayerCreated(): ExoPlayer {
         var p = player
         if (p == null) {
-            p = ExoPlayer.Builder(context).build().apply {
-                setVideoTextureView(textureView)
-                repeatMode = if (shouldRepeat) Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_OFF
-                addListener(object : Player.Listener {
-                    override fun onPlaybackStateChanged(state: Int) {
-                        val currentExo = player ?: return
-                        when (state) {
-                            Player.STATE_READY -> {
-                                onBuffering?.invoke(false)
-                                onReady?.invoke(currentExo.duration)
-                                // Start progress reporting only after ready
-                                textureView.removeCallbacks(progressRunnable)
-                                textureView.post(progressRunnable)
+            p = ExoPlayer.Builder(context)
+                .setLooper(Looper.getMainLooper())
+                .build()
+                .apply {
+                    setVideoTextureView(textureView)
+                    repeatMode = if (shouldRepeat) Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_OFF
+                    addListener(object : Player.Listener {
+                        override fun onPlaybackStateChanged(state: Int) {
+                            val currentExo = player ?: return
+                            when (state) {
+                                Player.STATE_READY -> {
+                                    cachedDurationMs = currentExo.duration
+                                    cachedPositionMs = currentExo.currentPosition
+                                    onBuffering?.invoke(false)
+                                    onReady?.invoke(currentExo.duration)
+                                    // Start progress reporting only after ready
+                                    textureView.removeCallbacks(progressRunnable)
+                                    textureView.post(progressRunnable)
+                                }
+                                Player.STATE_BUFFERING -> onBuffering?.invoke(true)
+                                Player.STATE_ENDED     -> {
+                                    textureView.removeCallbacks(progressRunnable)
+                                    onEnd?.invoke()
+                                }
+                                else -> {}
                             }
-                            Player.STATE_BUFFERING -> onBuffering?.invoke(true)
-                            Player.STATE_ENDED     -> {
-                                textureView.removeCallbacks(progressRunnable)
-                                onEnd?.invoke()
-                            }
-                            else -> {}
                         }
-                    }
-                    override fun onVideoSizeChanged(videoSize: VideoSize) {
-                        videoWidth = videoSize.width
-                        videoHeight = videoSize.height
-                        applyScale()
-                    }
-                    override fun onPlayerError(error: PlaybackException) {
-                        textureView.removeCallbacks(progressRunnable)
-                        onError?.invoke(error.errorCode, error.localizedMessage ?: "ExoPlayer error")
-                    }
-                })
-            }
+                        override fun onVideoSizeChanged(videoSize: VideoSize) {
+                            videoWidth = videoSize.width
+                            videoHeight = videoSize.height
+                            applyScale()
+                        }
+                        override fun onPlayerError(error: PlaybackException) {
+                            textureView.removeCallbacks(progressRunnable)
+                            onError?.invoke(error.errorCode, error.localizedMessage ?: "ExoPlayer error")
+                        }
+                    })
+                }
             player = p
         }
         return p
     }
 
-    fun load(url: String) {
-        val p = ensurePlayerCreated()
-        p.stop()
-        p.clearMediaItems()
+    fun load(url: String, headers: Map<String, String>? = null) {
+        runOnMain {
+            val p = ensurePlayerCreated()
+            p.stop()
+            p.clearMediaItems()
 
-        val mediaItem = MediaItem.fromUri(url)
+            val mediaItem = MediaItem.fromUri(url)
+            if (headers != null && headers.isNotEmpty()) {
+                val dataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
+                    .setDefaultRequestProperties(headers)
+                val mediaSource = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(context)
+                    .setDataSourceFactory(dataSourceFactory)
+                    .createMediaSource(mediaItem)
+                p.setMediaSource(mediaSource)
+            } else {
+                p.setMediaItem(mediaItem)
+            }
 
-        p.setMediaItem(mediaItem)
-        p.repeatMode = if (shouldRepeat) Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_OFF
-        p.volume = if (isMuted) 0f else currentVolume
-        p.prepare()
-        
-        // Reset progress reporting callback on main thread
-        textureView.removeCallbacks(progressRunnable)
-        textureView.post(progressRunnable)
+            p.repeatMode = if (shouldRepeat) Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_OFF
+            p.volume = if (isMuted) 0f else currentVolume
+            p.prepare()
+            
+            // Reset progress reporting callback on main thread
+            textureView.removeCallbacks(progressRunnable)
+            textureView.post(progressRunnable)
+        }
     }
 
-    fun play()  { player?.play() }
-    fun pause() { player?.pause() }
+    fun play()  { runOnMain { player?.play() } }
+    fun pause() { runOnMain { player?.pause() } }
     fun stop()  {
-        textureView.removeCallbacks(progressRunnable)
-        player?.stop()
+        runOnMain {
+            textureView.removeCallbacks(progressRunnable)
+            player?.stop()
+        }
     }
 
     fun setVolume(volume: Float) {
         currentVolume = volume.coerceIn(0f, 1f)
-        updatePlayerVolume()
+        runOnMain { updatePlayerVolume() }
     }
 
     fun setMuted(muted: Boolean) {
         isMuted = muted
-        updatePlayerVolume()
+        runOnMain { updatePlayerVolume() }
     }
 
     private fun updatePlayerVolume() {
@@ -134,30 +171,50 @@ class ExoPlayerBridge(private val context: Context) {
 
     fun setRepeat(enabled: Boolean) {
         shouldRepeat = enabled
-        player?.repeatMode = if (enabled) Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_OFF
+        runOnMain {
+            player?.repeatMode = if (enabled) Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_OFF
+        }
     }
 
     fun seekTo(positionMs: Long, onDone: (Boolean) -> Unit) {
-        player?.seekTo(positionMs)
-        onDone(true)
+        cachedPositionMs = positionMs
+        runOnMain {
+            player?.seekTo(positionMs)
+            onDone(true)
+        }
     }
 
-    val currentPositionMs: Long get() = player?.currentPosition ?: 0L
-    val durationMs: Long get() = player?.duration ?: -1L
+    val currentPositionMs: Long
+        get() {
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                return player?.currentPosition ?: cachedPositionMs
+            }
+            return cachedPositionMs
+        }
 
-    // ── Screenshot ───────────────────────────────────────────────────────────
+    val durationMs: Long
+        get() {
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                return player?.duration ?: cachedDurationMs
+            }
+            return cachedDurationMs
+        }
 
     fun takeScreenshot(callback: (String?) -> Unit) {
-        if (textureView.width <= 0 || textureView.height <= 0) {
-            callback(null)
-            return
-        }
-        val bitmap = textureView.bitmap
-        if (bitmap != null) {
-            val path = saveBitmap(bitmap)
-            callback(path)
-        } else {
-            callback(null)
+        runOnMain {
+            if (textureView.width <= 0 || textureView.height <= 0) {
+                callback(null)
+                return@runOnMain
+            }
+            val bitmap = textureView.bitmap
+            if (bitmap != null) {
+                java.util.concurrent.Executors.newSingleThreadExecutor().execute {
+                    val path = saveBitmap(bitmap)
+                    Handler(Looper.getMainLooper()).post { callback(path) }
+                }
+            } else {
+                callback(null)
+            }
         }
     }
 
@@ -232,9 +289,11 @@ class ExoPlayerBridge(private val context: Context) {
     }
 
     fun release() {
-        // Remove callbacks BEFORE releasing player to prevent use-after-free
-        textureView.removeCallbacks(progressRunnable)
-        player?.release()
-        player = null
+        runOnMain {
+            // Remove callbacks BEFORE releasing player to prevent use-after-free
+            textureView.removeCallbacks(progressRunnable)
+            player?.release()
+            player = null
+        }
     }
 }

@@ -34,6 +34,8 @@ namespace margelo::nitro::streamingvideo {
       prototype.registerHybridSetter("zoomEnabled", &HybridVideoPlayerViewSpec::setZoomEnabled);
       prototype.registerHybridGetter("isLive", &HybridVideoPlayerViewSpec::getIsLive);
       prototype.registerHybridSetter("isLive", &HybridVideoPlayerViewSpec::setIsLive);
+      prototype.registerHybridGetter("headers", &HybridVideoPlayerViewSpec::getHeaders);
+      prototype.registerHybridSetter("headers", &HybridVideoPlayerViewSpec::setHeaders);
       prototype.registerHybridGetter("onReady", &HybridVideoPlayerViewSpec::getOnReady);
       prototype.registerHybridSetter("onReady", &HybridVideoPlayerViewSpec::setOnReady);
       prototype.registerHybridGetter("onProgress", &HybridVideoPlayerViewSpec::getOnProgress);

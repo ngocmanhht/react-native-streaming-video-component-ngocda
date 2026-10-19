@@ -16,6 +16,8 @@
     "nitrogen",
     "*.podspec",
     "!lib/typescript/example",
+    "!lib/typescript/__tests__",
+    "!src/__tests__",
     "!ios/build",
     "!android/build",
     "nitro.json"
@@ -63,6 +65,7 @@
   "devDependencies": {
     "@react-native-community/slider": "*",
     "@react-native/typescript-config": "^0.85.3",
+    "@types/jest": "^30.0.0",
     "@types/react": "^19.2.14",
     "@types/react-native": "^0.73.0",
     "@typescript-eslint/eslint-plugin": "^7.5.0",
@@ -72,6 +75,7 @@
     "eslint-plugin-react": "^7.34.1",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-native": "^4.1.0",
+    "jest": "^30.5.2",
     "lucide-react-native": "*",
     "nitrogen": "0.35.0",
     "prettier": "^3.2.5",
@@ -84,6 +88,7 @@
     "react-native-reanimated": "*",
     "react-native-safe-area-context": "*",
     "react-native-svg": "*",
+    "ts-jest": "^29.4.15",
     "typescript": "^5.0.0"
   },
   "react-native-builder-bob": {

@@ -41,6 +41,7 @@ namespace margelo::nitro::streamingvideo { enum class StreamProtocol; }
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
 
 // C++ helpers for Swift
 #include "react_native_streaming_video_component_ngocda-Swift-Cxx-Bridge.hpp"

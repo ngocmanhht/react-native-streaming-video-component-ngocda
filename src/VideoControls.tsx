@@ -1,5 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState, type ComponentType, type FC } from 'react'
-import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native'
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type LayoutChangeEvent,
+} from 'react-native'
 import {
   Play,
   Pause,
@@ -51,6 +58,7 @@ export interface VideoControlsProps {
   state: VideoPlayerState
   streamProtocol: StreamProtocol
   isFullscreen: boolean
+  isLive?: boolean
   seekInterval?: number
   icons?: ControlIcons
   onPlay: () => void
@@ -170,9 +178,13 @@ const FadeView: FC<FadeViewProps> = ({ visible, children }) => {
     })
   }, [visible, opacity])
 
-  if (!visible && opacity.value === 0) return null
-
-  return <Reanimated.View style={[StyleSheet.absoluteFill, animStyle]}>{children}</Reanimated.View>
+  return (
+    <Reanimated.View
+      pointerEvents={visible ? 'auto' : 'none'}
+      style={[StyleSheet.absoluteFill, animStyle]}>
+      {children}
+    </Reanimated.View>
+  )
 }
 FadeView.displayName = 'FadeView'
 
@@ -314,11 +326,12 @@ export const VideoControls: FC<VideoControlsProps> = ({
   state,
   streamProtocol,
   isFullscreen,
+  isLive: isLiveProp,
   seekInterval = 15,
   icons: customIcons,
   onPlay,
   onPause,
-  onStop,
+  onStop: _onStop,
   onSeekBy,
   onVolumeChange,
   onToggleMute,
@@ -370,6 +383,15 @@ export const VideoControls: FC<VideoControlsProps> = ({
     scheduleHide()
   }, [scheduleHide])
 
+  const handleOverlayPress = useCallback(() => {
+    if (visible) {
+      if (hideTimer.current) clearTimeout(hideTimer.current)
+      setVisible(false)
+    } else {
+      showAndScheduleHide()
+    }
+  }, [visible, showAndScheduleHide])
+
   useEffect(() => {
     if (state.playbackState === 'playing') {
       scheduleHide()
@@ -382,11 +404,14 @@ export const VideoControls: FC<VideoControlsProps> = ({
     }
   }, [state.playbackState, scheduleHide])
 
-  const isLive = isLiveProtocol(streamProtocol, state.duration)
+  const isLive = isLiveProp !== undefined ? isLiveProp : isLiveProtocol(streamProtocol, state.duration)
   const isRtsp = streamProtocol === 'rtsp'
   const seekDisabled = isLive || state.duration <= 0
   const isActive = isActiveState(state.playbackState)
   const isPaused = state.paused
+  const isBufferingOrLoading =
+    state.isBuffering || state.playbackState === 'loading' || state.playbackState === 'reconnecting'
+  const isError = state.playbackState === 'error' || (state.error !== null && !isActive)
 
   const handleSeekBy = useCallback(
     (delta: number) => {
@@ -417,13 +442,13 @@ export const VideoControls: FC<VideoControlsProps> = ({
   // Show volume and fullscreen only if enough width
   const showVolume = containerSize.width > 200 && showBottomControls
   const showFullscreen = containerSize.width > 100 && showBottomControls
-  const showCenterSeeks = containerSize.width > 180
+  const showCenterSeeks = containerSize.width > 180 && !isError
   const showCamera = showCameraButton && containerSize.width > 120 && showBottomControls
 
   return (
     <Pressable
       style={StyleSheet.absoluteFill}
-      onPress={showAndScheduleHide}
+      onPress={handleOverlayPress}
       accessibilityLabel="Toggle controls">
       <FadeView visible={visible}>
         <View style={styles.overlay} onLayout={onOverlayLayout}>
@@ -465,7 +490,24 @@ export const VideoControls: FC<VideoControlsProps> = ({
               </Pressable>
             )}
 
-            {!isRtsp && (
+            {isError ? (
+              <View style={styles.errorContainer}>
+                <Text style={styles.errorText}>
+                  {state.error || 'Không thể tải luồng video'}
+                </Text>
+                <Pressable
+                  style={styles.retryBtn}
+                  onPress={() => {
+                    onPlay()
+                    showAndScheduleHide()
+                  }}
+                  accessibilityLabel="Thử lại">
+                  <Text style={styles.retryBtnText}>Thử lại</Text>
+                </Pressable>
+              </View>
+            ) : isBufferingOrLoading ? (
+              <ActivityIndicator size="large" color="#ffffff" style={styles.centerSpinner} />
+            ) : (
               <Pressable
                 style={[
                   styles.iconBtn,
@@ -575,8 +617,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
   },
+  centerSpinner: {
+    padding: 12,
+  },
   disabled: {
     opacity: 0.3,
+  },
+  errorContainer: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    borderRadius: 8,
+    maxWidth: '80%',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  errorText: {
+    color: '#ff6b6b',
+    fontSize: 14,
+    marginBottom: 8,
+    textAlign: 'center',
   },
   flexSpacer: {
     flex: 1,
@@ -608,6 +667,17 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.18)',
     borderColor: 'rgba(255,255,255,0.55)',
     borderWidth: 2,
+  },
+  retryBtn: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+  },
+  retryBtnText: {
+    color: '#000000',
+    fontSize: 13,
+    fontWeight: '600',
   },
   seekContainer: {
     height: 30,

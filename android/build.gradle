@@ -21,10 +21,12 @@ android {
         minSdk 24
         targetSdk 34
 
+        consumerProguardFiles "proguard-rules.pro"
+
         externalNativeBuild {
             cmake {
                 cppFlags "-O2 -frtti -fexceptions -Wall -fstack-protector-all"
-                arguments "-DANDROID_STL=c++_shared"
+                arguments "-DANDROID_STL=c++_shared", "-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-z,max-page-size=16384"
                 abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
             }
         }
@@ -65,12 +67,13 @@ dependencies {
 
     // ExoPlayer / Media3
     implementation "androidx.media3:media3-exoplayer:1.4.1"
+    implementation "androidx.media3:media3-datasource:1.4.1"
     implementation "androidx.media3:media3-exoplayer-rtsp:1.4.1"
     implementation "androidx.media3:media3-exoplayer-hls:1.4.1"
     implementation "androidx.media3:media3-ui:1.4.1"
 
     // LibVLC - RTSP exotic fallback
-    implementation "org.videolan.android:libvlc-all:3.6.0"
+    implementation "org.videolan.android:libvlc-all:3.6.5"
 }
 
 // Nitrogen Autolinking
@@ -82,4 +85,13 @@ react {
     jsRootDir = file("../src/")
     libraryName = "StreamingVideoComponentNgocda"
     codegenJavaPackageName = "com.streamingvideongocda"
+}
+
+afterEvaluate {
+    tasks.matching { it.name.startsWith("externalNativeBuild") && !it.name.contains("Clean") }.configureEach { task ->
+        def nitroProject = rootProject.findProject(':react-native-nitro-modules')
+        if (nitroProject != null) {
+            task.dependsOn(nitroProject.tasks.matching { it.name.startsWith("externalNativeBuild") && !it.name.contains("Clean") })
+        }
+    }
 }

@@ -231,6 +231,44 @@ open class HybridVideoPlayerViewSpec_cxx {
     }
   }
   
+  public final var headers: bridge.std__optional_std__unordered_map_std__string__std__string__ {
+    @inline(__always)
+    get {
+      return { () -> bridge.std__optional_std__unordered_map_std__string__std__string__ in
+        if let __unwrappedValue = self.__implementation.headers {
+          return bridge.create_std__optional_std__unordered_map_std__string__std__string__({ () -> bridge.std__unordered_map_std__string__std__string_ in
+            var __map = bridge.create_std__unordered_map_std__string__std__string_(__unwrappedValue.count)
+            for (__k, __v) in __unwrappedValue {
+              bridge.emplace_std__unordered_map_std__string__std__string_(&__map, std.string(__k), std.string(__v))
+            }
+            return __map
+          }())
+        } else {
+          return .init()
+        }
+      }()
+    }
+    @inline(__always)
+    set {
+      self.__implementation.headers = { () -> Dictionary<String, String>? in
+        if bridge.has_value_std__optional_std__unordered_map_std__string__std__string__(newValue) {
+          let __unwrapped = bridge.get_std__optional_std__unordered_map_std__string__std__string__(newValue)
+          return { () -> Dictionary<String, String> in
+            var __dictionary = Dictionary<String, String>(minimumCapacity: __unwrapped.size())
+            let __keys = bridge.get_std__unordered_map_std__string__std__string__keys(__unwrapped)
+            for __key in __keys {
+              let __value = bridge.get_std__unordered_map_std__string__std__string__value(__unwrapped, __key)
+              __dictionary[String(__key)] = String(__value)
+            }
+            return __dictionary
+          }()
+        } else {
+          return nil
+        }
+      }()
+    }
+  }
+  
   public final var onReady: bridge.std__optional_std__function_void_const_ReadyEvent_____event______ {
     @inline(__always)
     get {

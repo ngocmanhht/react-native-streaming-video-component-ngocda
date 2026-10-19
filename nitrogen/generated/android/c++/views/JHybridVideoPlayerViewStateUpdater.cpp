@@ -77,6 +77,10 @@ void JHybridVideoPlayerViewStateUpdater::updateViewProps(jni::alias_ref<jni::JCl
     hybridView->setIsLive(props->isLive.value);
     props->isLive.isDirty = false;
   }
+  if (props->headers.isDirty) {
+    hybridView->setHeaders(props->headers.value);
+    props->headers.isDirty = false;
+  }
   if (props->onReady.isDirty) {
     hybridView->setOnReady(props->onReady.value);
     props->onReady.isDirty = false;

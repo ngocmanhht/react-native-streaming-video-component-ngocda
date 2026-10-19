@@ -9,6 +9,7 @@ final class AVPlayerBridge: NSObject {
   private var itemObservations: [NSKeyValueObservation] = []
   private var progressIntervalSeconds: Double = 0.5
   private var _isRepeating = false
+  private var videoOutput: AVPlayerItemVideoOutput?
 
   // Store target view so we can create the layer AFTER player is ready
   private weak var targetView: UIView?
@@ -35,6 +36,10 @@ final class AVPlayerBridge: NSObject {
 
   func detach() {
     removeObservers()
+    if let item = player?.currentItem, let output = videoOutput {
+      item.remove(output)
+    }
+    videoOutput = nil
     playerLayer?.removeFromSuperlayer()
     playerLayer = nil
     player = nil
@@ -74,47 +79,43 @@ final class AVPlayerBridge: NSObject {
     }
   }
 
-  func load(url: String, isLiveStream: Bool = false) {
+  func load(url: String, isLiveStream: Bool = false, headers: [String: String]? = nil) {
     removeObservers()
     guard let u = URL(string: url) else { return }
 
     // ── AVURLAsset options ─────────────────────────────────────────────────────
-    let assetOptions: [String: Any] = [
+    var assetOptions: [String: Any] = [
       // Forward cookies (helps with authenticated HLS / CDN-protected MP4)
       AVURLAssetHTTPCookiesKey: HTTPCookieStorage.shared.cookies ?? [],
     ]
+    if let h = headers, !h.isEmpty {
+      assetOptions["AVURLAssetHTTPHeaderFieldsKey"] = h
+    }
     let asset = AVURLAsset(url: u, options: assetOptions)
     let item = AVPlayerItem(asset: asset)
 
+    let outputSettings: [String: Any] = [
+      kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA)
+    ]
+    let output = AVPlayerItemVideoOutput(pixelBufferAttributes: outputSettings)
+    item.add(output)
+    self.videoOutput = output
+
     if isLiveStream {
-      // ── HLS live stream: optimise for low latency ───────────────────────────────
-      // Set to 0.0 to let AVPlayer automatically determine the optimal buffer duration
-      // based on playlist chunk size, avoiding micro-stuttering on larger chunk streams.
-      item.preferredForwardBufferDuration = 0.0
+      // ── HLS live stream: cho phép 2.0s buffer để tránh stall tức thì
+      item.preferredForwardBufferDuration = 2.0
     } else {
-      // ── MP4 / VOD: optimise for smooth, stall-free playback ────────────────────
-      // Buffer 10 s ahead so seeking & playback are smooth
+      // ── MP4 / VOD: optimise for smooth, stall-free playback
       item.preferredForwardBufferDuration = 10.0
     }
 
     if player == nil {
       let p = AVPlayer(playerItem: item)
-
-      if isLiveStream {
-        // HLS live: play immediately without waiting to buffer more
-        // (reduces perceived latency on live cameras / streams)
-        p.automaticallyWaitsToMinimizeStalling = false
-      } else {
-        // MP4 / VOD: keep the default ‘true’ so AVPlayer buffers before playing,
-        // preventing mid-playback stalls on slower connections
-        p.automaticallyWaitsToMinimizeStalling = true
-      }
-
+      p.automaticallyWaitsToMinimizeStalling = true
       player = p
     } else {
       player?.replaceCurrentItem(with: item)
-      // Re-apply stalling preference when reusing the same AVPlayer instance
-      player?.automaticallyWaitsToMinimizeStalling = !isLiveStream
+      player?.automaticallyWaitsToMinimizeStalling = true
     }
 
     // CRITICAL: create or re-link the layer NOW, after player exists.
@@ -197,6 +198,7 @@ final class AVPlayerBridge: NSObject {
     // Buffering state
     let bufObs = item.observe(\.isPlaybackLikelyToKeepUp, options: [.new]) { [weak self] item, _ in
       DispatchQueue.main.async {
+        print("[AVPlayer] isPlaybackLikelyToKeepUp: \(item.isPlaybackLikelyToKeepUp), isPlaybackBufferEmpty: \(item.isPlaybackBufferEmpty)")
         self?.onBuffering?(!item.isPlaybackLikelyToKeepUp)
       }
     }
@@ -211,7 +213,40 @@ final class AVPlayerBridge: NSObject {
       object: item
     )
 
+    // Error log notification (bắt mã lỗi HTTP 403, 404, network failure)
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(handleErrorLogEntry(_:)),
+      name: AVPlayerItem.newErrorLogEntryNotification,
+      object: item
+    )
+
+    // Access log notification (bắt khi tải chunk/playlist thành công)
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(handleAccessLogEntry(_:)),
+      name: AVPlayerItem.newAccessLogEntryNotification,
+      object: item
+    )
+
     addTimeObserver()
+  }
+
+  @objc private func handleErrorLogEntry(_ notification: Notification) {
+    guard let item = notification.object as? AVPlayerItem,
+          let event = item.errorLog()?.events.last else { return }
+    print("❌ [AVPlayer ErrorLog] HTTP Status: \(event.errorStatusCode) | URI: \(event.uri ?? "nil") | Comment: \(event.errorComment ?? "nil") | Domain: \(event.errorDomain)")
+    if event.errorStatusCode >= 400 {
+      DispatchQueue.main.async { [weak self] in
+        self?.onError?(event.errorStatusCode, event.errorComment ?? "HTTP Error \(event.errorStatusCode)")
+      }
+    }
+  }
+
+  @objc private func handleAccessLogEntry(_ notification: Notification) {
+    guard let item = notification.object as? AVPlayerItem,
+          let event = item.accessLog()?.events.last else { return }
+    print("✅ [AVPlayer AccessLog] Server: \(event.serverAddress ?? "nil") | URI: \(event.uri ?? "nil") | Bitrate: \(event.observedBitrate)")
   }
 
   private func addTimeObserver() {
@@ -253,26 +288,77 @@ final class AVPlayerBridge: NSObject {
   // MARK: - Screenshot
 
   func takeScreenshot(completion: @escaping (String?) -> Void) {
-    guard let asset = player?.currentItem?.asset else {
-      completion(nil)
+    // 1. Try AVPlayerItemVideoOutput (Native HLS / m3u8 frame decoding from GPU)
+    if let item = player?.currentItem, let output = videoOutput {
+      let currentTime = item.currentTime()
+      if output.hasNewPixelBuffer(forItemTime: currentTime),
+         let pixelBuffer = output.copyPixelBuffer(forItemTime: currentTime, itemTimeForDisplay: nil) {
+        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+        let context = CIContext(options: nil)
+        if let cgImage = context.createCGImage(ciImage, from: ciImage.extent) {
+          let uiImage = UIImage(cgImage: cgImage)
+          if let path = self.saveImage(uiImage) {
+            DispatchQueue.main.async { completion(path) }
+            return
+          }
+        }
+      }
+    }
+
+    // 2. Try AVAssetImageGenerator (for MP4 / non-HLS files)
+    if let asset = player?.currentItem?.asset {
+      let imageGenerator = AVAssetImageGenerator(asset: asset)
+      imageGenerator.appliesPreferredTrackTransform = true
+      imageGenerator.requestedTimeToleranceBefore = .zero
+      imageGenerator.requestedTimeToleranceAfter = .zero
+      let time = player?.currentTime() ?? .zero
+
+      imageGenerator.generateCGImagesAsynchronously(forTimes: [NSValue(time: time)]) { [weak self] _, image, _, result, _ in
+        guard let self = self else {
+          completion(nil)
+          return
+        }
+        if result == .succeeded, let image = image {
+          let uiImage = UIImage(cgImage: image)
+          if let path = self.saveImage(uiImage) {
+            DispatchQueue.main.async { completion(path) }
+            return
+          }
+        }
+
+        // 3. Fallback to UIView / Layer render (works for any active video frame)
+        DispatchQueue.main.async {
+          if let view = self.targetView, view.bounds.width > 0, view.bounds.height > 0 {
+            let renderer = UIGraphicsImageRenderer(bounds: view.bounds)
+            let uiImage = renderer.image { ctx in
+              view.drawHierarchy(in: view.bounds, afterScreenUpdates: false)
+            }
+            let path = self.saveImage(uiImage)
+            completion(path)
+          } else {
+            completion(nil)
+          }
+        }
+      }
       return
     }
-    let imageGenerator = AVAssetImageGenerator(asset: asset)
-    imageGenerator.appliesPreferredTrackTransform = true
-    let time = player?.currentTime() ?? .zero
 
-    imageGenerator.generateCGImagesAsynchronously(forTimes: [NSValue(time: time)]) { [weak self] _, image, _, _, _ in
+    // 3. Fallback to UIView / Layer render
+    DispatchQueue.main.async { [weak self] in
       guard let self = self else {
         completion(nil)
         return
       }
-      guard let image = image else {
-        DispatchQueue.main.async { completion(nil) }
-        return
+      if let view = self.targetView, view.bounds.width > 0, view.bounds.height > 0 {
+        let renderer = UIGraphicsImageRenderer(bounds: view.bounds)
+        let uiImage = renderer.image { ctx in
+          view.drawHierarchy(in: view.bounds, afterScreenUpdates: false)
+        }
+        let path = self.saveImage(uiImage)
+        completion(path)
+      } else {
+        completion(nil)
       }
-      let uiImage = UIImage(cgImage: image)
-      let path = self.saveImage(uiImage)
-      DispatchQueue.main.async { completion(path) }
     }
   }
 
