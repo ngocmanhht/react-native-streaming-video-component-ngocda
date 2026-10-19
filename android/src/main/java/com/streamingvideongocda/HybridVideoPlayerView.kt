@@ -304,7 +304,7 @@ class HybridVideoPlayerView(private val ctx: ReactContext)
         if (useVlcFallback) {
             if (vlcNeedsReconnect) {
                 vlcNeedsReconnect = false
-                vlc.load(url)
+                vlc.load(url, headers)
             }
             vlc.play()
         } else {

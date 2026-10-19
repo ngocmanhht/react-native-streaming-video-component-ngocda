@@ -84,11 +84,12 @@ final class VLCPlayerBridge: NSObject, VLCMediaPlayerDelegate {
     media.addOption(":clock-synchro=0")
 
     if let h = headers {
-      if let ua = h["User-Agent"] {
-        media.addOption(":http-user-agent=\(ua)")
-      }
-      if let ref = h["Referer"] {
-        media.addOption(":http-referrer=\(ref)")
+      for (key, value) in h {
+        if key.caseInsensitiveCompare("User-Agent") == .orderedSame {
+          media.addOption(":http-user-agent=\(value)")
+        } else if key.caseInsensitiveCompare("Referer") == .orderedSame || key.caseInsensitiveCompare("Referrer") == .orderedSame {
+          media.addOption(":http-referrer=\(value)")
+        }
       }
     }
 

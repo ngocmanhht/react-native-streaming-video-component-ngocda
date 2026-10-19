@@ -265,6 +265,15 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
     if !paused {
       avBridge?.play()
     }
+
+    let workItem = DispatchWorkItem { [weak self] in
+      guard let self = self, !self.paused, (self.activeProtocol == .hls || self.activeProtocol == .mp4), !self.useVlcFallback else { return }
+      print("StreamingVideo: AVPlayer timeout waiting for playback, falling back to VLC")
+      self.useVlcFallback = true
+      self.loadVlc()
+    }
+    avFallbackWorkItem = workItem
+    DispatchQueue.main.asyncAfter(deadline: .now() + 10.0, execute: workItem)
   }
 
   private func loadVlc() {

@@ -190,7 +190,7 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
   useEffect(() => {
     const subscription = AppState.addEventListener('change', nextAppState => {
       if (nextAppState === 'background' || nextAppState === 'inactive') {
-        if (!state.paused && state.playbackState === 'playing') {
+        if (!state.paused) {
           wasPlayingBeforeBackground.current = true
           pause()
         }
@@ -204,7 +204,7 @@ export const VideoPlayer: FC<VideoPlayerPublicProps> = ({
     return () => {
       subscription.remove()
     }
-  }, [state.paused, state.playbackState, pause, play])
+  }, [state.paused, pause, play])
 
   // ── Ref Management ───────────────────────────────────────────────────────
   // We use a callback ref to ensure internalRef is always set (for useVideoPlayer logic)

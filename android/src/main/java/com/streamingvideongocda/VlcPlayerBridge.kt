@@ -133,7 +133,7 @@ class VlcPlayerBridge(private val context: Context) {
             headers?.forEach { (k, v) ->
                 if (k.equals("User-Agent", ignoreCase = true)) {
                     addOption(":http-user-agent=$v")
-                } else if (k.equals("Referer", ignoreCase = true)) {
+                } else if (k.equals("Referer", ignoreCase = true) || k.equals("Referrer", ignoreCase = true)) {
                     addOption(":http-referrer=$v")
                 }
             }
