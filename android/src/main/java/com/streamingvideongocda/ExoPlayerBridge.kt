@@ -118,7 +118,7 @@ class ExoPlayerBridge(private val context: Context) {
         return p
     }
 
-    fun load(url: String, headers: Map<String, String>? = null) {
+    fun load(url: String, headers: Map<String, String>?) {
         runOnMain {
             val p = ensurePlayerCreated()
             p.stop()

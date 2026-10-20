@@ -110,7 +110,7 @@ class VlcPlayerBridge(private val context: Context) {
         player.videoScale = MediaPlayer.ScaleType.SURFACE_BEST_FIT
     }
 
-    fun load(url: String, headers: Map<String, String>? = null) {
+    fun load(url: String, headers: Map<String, String>?) {
         val encodedUrl = SecurityUtils.encodeRtspUrl(url)
         Log.d("StreamingVideo", "VlcPlayerBridge: load url=${SecurityUtils.sanitizeUrl(encodedUrl)}")
 
