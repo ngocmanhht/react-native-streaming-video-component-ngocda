@@ -233,7 +233,15 @@ class HybridVideoPlayerView(private val ctx: ReactContext)
         reconnectHandler.postDelayed(reconnectRunnable, delayMs)
     }
 
+    private var exoFallbackRunnable: Runnable? = null
+
+    private fun cancelExoFallbackTimer() {
+        exoFallbackRunnable?.let { mainHandler.removeCallbacks(it) }
+        exoFallbackRunnable = null
+    }
+
     private fun loadExo() {
+        cancelExoFallbackTimer()
         runOnMain {
             Log.d("StreamingVideo", "loadExo: url=${SecurityUtils.sanitizeUrl(url)}")
             // Stop VLC and clear its view before switching
@@ -255,10 +263,21 @@ class HybridVideoPlayerView(private val ctx: ReactContext)
                 Log.d("StreamingVideo", "loadExo -> calling exo.play() immediately")
                 exo.play()
             }
+
+            val fallbackWorkItem = Runnable {
+                if (!paused && (activeProtocol == StreamProtocol.HLS || activeProtocol == StreamProtocol.MP4) && !useVlcFallback) {
+                    Log.d("StreamingVideo", "ExoPlayer timeout waiting for playback (2.5s), falling back to VLC")
+                    useVlcFallback = true
+                    loadVlc()
+                }
+            }
+            exoFallbackRunnable = fallbackWorkItem
+            mainHandler.postDelayed(fallbackWorkItem, 2000L)
         }
     }
 
     private fun loadVlc() {
+        cancelExoFallbackTimer()
         runOnMain {
             Log.d("StreamingVideo", "loadVlc: url=${SecurityUtils.sanitizeUrl(url)}")
             exo.stop()
@@ -327,6 +346,7 @@ class HybridVideoPlayerView(private val ctx: ReactContext)
     override fun play()  { paused = false }
     override fun pause() { paused = true }
     override fun stop()  {
+        cancelExoFallbackTimer()
         runOnMain {
             exo.stop()
             vlc.stop()
@@ -383,6 +403,7 @@ class HybridVideoPlayerView(private val ctx: ReactContext)
 
     private fun bindExo() {
         exo.onReady = { dur ->
+            cancelExoFallbackTimer()
             retryCount = 0
             Log.d("StreamingVideo", "ExoPlayer onReady: durationMs=$dur")
             onReady?.invoke(ReadyEvent(if (dur < 0) -1.0 else dur / 1000.0, NaturalSize(0.0, 0.0)))
@@ -394,6 +415,7 @@ class HybridVideoPlayerView(private val ctx: ReactContext)
             }
         }
         exo.onProgress = { cur, dur ->
+            cancelExoFallbackTimer()
             onProgress?.invoke(ProgressEvent(cur / 1000.0, if (dur < 0) -1.0 else dur / 1000.0, 0.0))
         }
         exo.onBuffering = { b ->
@@ -416,6 +438,7 @@ class HybridVideoPlayerView(private val ctx: ReactContext)
             }
         }
         exo.onError = { code, msg ->
+            cancelExoFallbackTimer()
             Log.e("StreamingVideo", "ExoPlayer onError: code=$code, msg=$msg")
             // If HLS or MP4 fails on ExoPlayer, fall back to VLC
             if ((activeProtocol == StreamProtocol.HLS || activeProtocol == StreamProtocol.MP4) && !useVlcFallback) {
@@ -432,16 +455,21 @@ class HybridVideoPlayerView(private val ctx: ReactContext)
     private fun bindVlc() {
         vlc.onReady = { dur ->
             retryCount = 0
+            onBuffering?.invoke(false)
             Log.d("StreamingVideo", "VlcPlayer onReady: durationMs=$dur")
             onReady?.invoke(ReadyEvent(if (dur < 0) -1.0 else dur / 1000.0, NaturalSize(0.0, 0.0)))
             onStateChange?.invoke(PlaybackState.READY)
             // Async-safe auto-play
             if (!paused) {
-                vlc.play()
                 onStateChange?.invoke(PlaybackState.PLAYING)
             }
         }
         vlc.onProgress = { cur, dur ->
+            cancelExoFallbackTimer()
+            onBuffering?.invoke(false)
+            if (!paused) {
+                onStateChange?.invoke(PlaybackState.PLAYING)
+            }
             onProgress?.invoke(ProgressEvent(cur / 1000.0, if (dur < 0) -1.0 else dur / 1000.0, 0.0))
         }
         vlc.onBuffering = { b ->

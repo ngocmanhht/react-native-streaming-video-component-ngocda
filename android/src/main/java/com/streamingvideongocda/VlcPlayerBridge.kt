@@ -110,7 +110,7 @@ class VlcPlayerBridge(private val context: Context) {
         player.videoScale = MediaPlayer.ScaleType.SURFACE_BEST_FIT
     }
 
-    fun load(url: String, headers: Map<String, String>?) {
+    fun load(url: String, headers: Map<String, String>? = null) {
         val encodedUrl = SecurityUtils.encodeRtspUrl(url)
         Log.d("StreamingVideo", "VlcPlayerBridge: load url=${SecurityUtils.sanitizeUrl(encodedUrl)}")
 
@@ -119,17 +119,36 @@ class VlcPlayerBridge(private val context: Context) {
         }
 
         val uri = Uri.parse(encodedUrl)
+        val isHls = encodedUrl.lowercase().contains(".m3u8")
+        val isRtsp = encodedUrl.lowercase().startsWith("rtsp://")
+
         val media = Media(libVLC, uri).apply {
-            addOption(":rtsp-tcp")
-            addOption(":network-caching=3000") // 💡 Tăng lên 3000ms để đủ chờ I-Frame của Hikvision
-            addOption(":rtsp-caching=3000")
-            addOption(":clock-jitter=0")
-            addOption(":clock-synchro=0")
-            addOption(":codec=all")            // 💡 Tránh crash SIGABRT ở tầng MediaCodec NDK
-            addOption(":no-mediacodec-dr")
-            addOption(":no-omxil-dr")
-            addOption(":drop-late-frames")
-            addOption(":skip-frames")
+            if (isHls) {
+                // 💡 HLS Live: Chunks qua HTTP cần buffer đủ 1-2 chunks (3500ms) để không bị micro-freeze
+                addOption(":network-caching=3500")
+                addOption(":live-caching=3500")
+                addOption(":file-caching=3000")
+                addOption(":codec=all")
+                addOption(":no-mediacodec-dr")
+                addOption(":no-omxil-dr")
+            } else if (isRtsp) {
+                addOption(":rtsp-tcp")
+                addOption(":network-caching=3000") // 💡 Tăng lên 3000ms để đủ chờ I-Frame của Hikvision
+                addOption(":rtsp-caching=3000")
+                addOption(":clock-jitter=500")
+                addOption(":clock-synchro=0")
+                addOption(":codec=all")            // 💡 Tránh crash SIGABRT ở tầng MediaCodec NDK
+                addOption(":no-mediacodec-dr")
+                addOption(":no-omxil-dr")
+                addOption(":drop-late-frames")
+                addOption(":skip-frames")
+            } else {
+                addOption(":network-caching=3000")
+                addOption(":live-caching=3000")
+                addOption(":codec=all")
+                addOption(":no-mediacodec-dr")
+                addOption(":no-omxil-dr")
+            }
             headers?.forEach { (k, v) ->
                 if (k.equals("User-Agent", ignoreCase = true)) {
                     addOption(":http-user-agent=$v")

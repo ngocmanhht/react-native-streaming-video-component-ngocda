@@ -77,11 +77,30 @@ final class VLCPlayerBridge: NSObject, VLCMediaPlayerDelegate {
 
     let media = VLCMedia(url: u)
     
-    media.addOption(":rtsp-tcp")
-    media.addOption(":network-caching=3000") // 💡 Tăng lên 3000ms
-    media.addOption(":rtsp-caching=3000")
-    media.addOption(":clock-jitter=0")
-    media.addOption(":clock-synchro=0")
+    let lowerUrl = cleanUrlString.lowercased()
+    let isHls = lowerUrl.contains(".m3u8")
+    let isRtsp = lowerUrl.hasPrefix("rtsp://")
+
+    if isHls {
+      // 💡 Cho luồng HLS live:
+      // Chunks HLS tải qua HTTP theo đợt (2-3s/chunk).
+      // Buffer 3500ms để luôn có sẵn ít nhất 1.5 chunks trong bộ nhớ đệm, tránh khựng hình.
+      // Không đặt clock-jitter=0 và clock-synchro=0 vì HTTP chunking có độ trễ tự nhiên giữa các chunk,
+      // để VLC tự đồng bộ PTS mượt mà không bị drop khung hình.
+      media.addOption(":network-caching=3500")
+      media.addOption(":live-caching=3500")
+      media.addOption(":file-caching=3000")
+    } else if isRtsp {
+      media.addOption(":rtsp-tcp")
+      media.addOption(":network-caching=3000") // 💡 Tăng lên 3000ms
+      media.addOption(":live-caching=2000")
+      media.addOption(":rtsp-caching=3000")
+      media.addOption(":clock-jitter=500")
+      media.addOption(":clock-synchro=0")
+    } else {
+      media.addOption(":network-caching=3000")
+      media.addOption(":live-caching=3000")
+    }
 
     if let h = headers {
       for (key, value) in h {
@@ -141,13 +160,16 @@ final class VLCPlayerBridge: NSObject, VLCMediaPlayerDelegate {
     case .opening:
       onBuffering?(true)
     case .playing:
+      if let bounds = containerView?.bounds, bounds.width > 0, bounds.height > 0 {
+        updateLayout(bounds: bounds)
+      }
       onBuffering?(false)
       onReady?(duration, .zero)
     case .buffering:
       onBuffering?(true)
     case .error:
       onError?(-1, "VLCPlayer stream error")
-    case .ended, .stopped:
+    case .ended:
       if _isRepeating {
         // Seek to beginning and replay
         player.time = VLCTime(int: 0)
@@ -155,11 +177,17 @@ final class VLCPlayerBridge: NSObject, VLCMediaPlayerDelegate {
       } else {
         onEnd?()
       }
+    case .stopped:
+      break
     default: break
     }
   }
 
   func mediaPlayerTimeChanged(_ aNotification: Notification) {
+    onBuffering?(false)
+    if let bounds = containerView?.bounds, bounds.width > 0, bounds.height > 0 {
+      updateLayout(bounds: bounds)
+    }
     onProgress?(currentTime, duration, .zero)
   }
 

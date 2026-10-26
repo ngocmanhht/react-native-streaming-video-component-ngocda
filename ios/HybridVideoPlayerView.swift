@@ -268,12 +268,12 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
 
     let workItem = DispatchWorkItem { [weak self] in
       guard let self = self, !self.paused, (self.activeProtocol == .hls || self.activeProtocol == .mp4), !self.useVlcFallback else { return }
-      print("StreamingVideo: AVPlayer timeout waiting for playback, falling back to VLC")
+      print("StreamingVideo: AVPlayer timeout waiting for playback (2.0s), falling back to VLC")
       self.useVlcFallback = true
       self.loadVlc()
     }
     avFallbackWorkItem = workItem
-    DispatchQueue.main.asyncAfter(deadline: .now() + 10.0, execute: workItem)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0, execute: workItem)
   }
 
   private func loadVlc() {
@@ -291,6 +291,11 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
     vlcBridge?.attach(to: containerView)
     vlcBridge?.load(url: url, headers: headers)
     if !paused { vlcBridge?.play() }
+
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+      guard let self = self else { return }
+      self.vlcBridge?.updateLayout(bounds: self.containerView.bounds)
+    }
   }
 
   private func activePlay() {
@@ -519,8 +524,13 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
       }
     }
     avBridge?.onEnd = { [weak self] in
-      self?.onEnd?()
-      self?.onStateChange?(.ended)
+      guard let self = self else { return }
+      if self.isLive {
+        // Live stream doesn't end – it awaits the next chunk
+        return
+      }
+      self.onEnd?()
+      self.onStateChange?(.ended)
     }
   }
 
@@ -528,18 +538,26 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
     vlcBridge?.onReady = { [weak self] duration, _ in
       guard let self = self else { return }
       self.retryCount = 0
+      self.vlcBridge?.updateLayout(bounds: self.containerView.bounds)
+      self.onBuffering?(false)
       self.onReady?(.init(
         duration: duration,
         naturalSize: .init(width: 0, height: 0)
       ))
       self.onStateChange?(.ready)
       if !self.paused {
-        self.vlcBridge?.play()
         self.onStateChange?(.playing)
       }
     }
     vlcBridge?.onProgress = { [weak self] current, total, _ in
-      self?.onProgress?(.init(currentTime: current, duration: total, playableDuration: 0))
+      guard let self = self else { return }
+      self.cancelAVFallbackTimer()
+      self.vlcBridge?.updateLayout(bounds: self.containerView.bounds)
+      self.onBuffering?(false)
+      if !self.paused {
+        self.onStateChange?(.playing)
+      }
+      self.onProgress?(.init(currentTime: current, duration: total, playableDuration: 0))
     }
     vlcBridge?.onBuffering = { [weak self] isBuffering in
       guard let self = self else { return }
@@ -561,6 +579,10 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
     }
     vlcBridge?.onEnd = { [weak self] in
       guard let self = self else { return }
+      if self.isLive {
+        // Live stream doesn't end – it awaits the next chunk
+        return
+      }
       if (self.activeProtocol == .rtsp || self.activeProtocol == .rtmp || self.activeProtocol == .hls) && self.paused {
         self._rtspNeedsReconnect = true
       }

@@ -75,8 +75,19 @@ class ExoPlayerBridge(private val context: Context) {
     private fun ensurePlayerCreated(): ExoPlayer {
         var p = player
         if (p == null) {
+            val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
+                .setBufferDurationsMs(
+                    /* minBufferMs = */ 1000,
+                    /* maxBufferMs = */ 5000,
+                    /* bufferForPlaybackMs = */ 500,
+                    /* bufferForPlaybackAfterRebufferMs = */ 1000
+                )
+                .setPrioritizeTimeOverSizeThresholds(true)
+                .build()
+
             p = ExoPlayer.Builder(context)
                 .setLooper(Looper.getMainLooper())
+                .setLoadControl(loadControl)
                 .build()
                 .apply {
                     setVideoTextureView(textureView)
@@ -118,13 +129,25 @@ class ExoPlayerBridge(private val context: Context) {
         return p
     }
 
-    fun load(url: String, headers: Map<String, String>?) {
+    fun load(url: String, headers: Map<String, String>? = null) {
         runOnMain {
             val p = ensurePlayerCreated()
             p.stop()
             p.clearMediaItems()
 
-            val mediaItem = MediaItem.fromUri(url)
+            val mediaItem = if (isLive) {
+                val liveConfig = MediaItem.LiveConfiguration.Builder()
+                    .setTargetOffsetMs(2500L)
+                    .setMinPlaybackSpeed(0.97f)
+                    .setMaxPlaybackSpeed(1.03f)
+                    .build()
+                MediaItem.Builder()
+                    .setUri(url)
+                    .setLiveConfiguration(liveConfig)
+                    .build()
+            } else {
+                MediaItem.fromUri(url)
+            }
             if (headers != null && headers.isNotEmpty()) {
                 val dataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
                     .setDefaultRequestProperties(headers)

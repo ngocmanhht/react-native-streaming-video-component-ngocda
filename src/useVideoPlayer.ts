@@ -136,6 +136,8 @@ export function useVideoPlayer(options: UseVideoPlayerOptions = {}) {
         ...prev,
         currentTime: e.currentTime,
         duration: e.duration,
+        isBuffering: false,
+        playbackState: prev.paused ? 'paused' : 'playing',
       })),
     [],
   )

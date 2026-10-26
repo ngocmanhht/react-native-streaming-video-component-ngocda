@@ -9,6 +9,7 @@ final class AVPlayerBridge: NSObject {
   private var itemObservations: [NSKeyValueObservation] = []
   private var progressIntervalSeconds: Double = 0.5
   private var _isRepeating = false
+  private var isLive = false
   private var videoOutput: AVPlayerItemVideoOutput?
 
   // Store target view so we can create the layer AFTER player is ready
@@ -80,6 +81,7 @@ final class AVPlayerBridge: NSObject {
   }
 
   func load(url: String, isLiveStream: Bool = false, headers: [String: String]? = nil) {
+    self.isLive = isLiveStream
     removeObservers()
     guard let u = URL(string: url) else { return }
 
@@ -102,8 +104,8 @@ final class AVPlayerBridge: NSObject {
     self.videoOutput = output
 
     if isLiveStream {
-      // ── HLS live stream: cho phép 2.0s buffer để tránh stall tức thì
-      item.preferredForwardBufferDuration = 2.0
+      // ── HLS live stream: cho phép buffer nhỏ (0.5s) và không chờ stall để hỗ trợ playlist ngắn
+      item.preferredForwardBufferDuration = 0.5
     } else {
       // ── MP4 / VOD: optimise for smooth, stall-free playback
       item.preferredForwardBufferDuration = 10.0
@@ -111,11 +113,11 @@ final class AVPlayerBridge: NSObject {
 
     if player == nil {
       let p = AVPlayer(playerItem: item)
-      p.automaticallyWaitsToMinimizeStalling = true
+      p.automaticallyWaitsToMinimizeStalling = !isLiveStream
       player = p
     } else {
       player?.replaceCurrentItem(with: item)
-      player?.automaticallyWaitsToMinimizeStalling = true
+      player?.automaticallyWaitsToMinimizeStalling = !isLiveStream
     }
 
     // CRITICAL: create or re-link the layer NOW, after player exists.
@@ -276,6 +278,7 @@ final class AVPlayerBridge: NSObject {
   @objc private func playerItemDidEnd() {
     DispatchQueue.main.async { [weak self] in
       guard let self = self else { return }
+      if self.isLive { return }
       if self._isRepeating {
         self.player?.seek(to: .zero)
         self.player?.play()

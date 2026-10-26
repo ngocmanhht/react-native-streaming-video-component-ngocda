@@ -149,7 +149,7 @@ function calcIconSizes(width: number, height: number): IconSizes {
   return {
     play: clamp(34 * scale, 14 * minScale, 52),
     seek: clamp(28 * scale, 12 * minScale, 42),
-    bottom: clamp(22 * scale, 24 * minScale, 32),
+    bottom: clamp(22 * scale, 16, 32),
     playBtn: clamp(64 * scale, 32 * minScale, 96),
     seekLabel: clamp(10 * scale, 7, 14),
     timeText: clamp(12 * scale, 8 * minScale, 16),
@@ -436,14 +436,15 @@ export const VideoControls: FC<VideoControlsProps> = ({
   const FullscreenIcon = isFullscreen ? icons.exitFullscreen : icons.fullscreen
 
   // Dynamic hiding logic
+  const isCompactHeight = containerSize.height < 120
   const showSeek = containerSize.height > 180 && !isLive && isActive
   const showTime = containerSize.width > 260
-  const showBottomControls = containerSize.height > 100
+  const showBottomControls = containerSize.height > 50
   // Show volume and fullscreen only if enough width
-  const showVolume = containerSize.width > 200 && showBottomControls
-  const showFullscreen = containerSize.width > 100 && showBottomControls
+  const showVolume = containerSize.width > 200 && containerSize.height > 100
+  const showFullscreen = containerSize.width > 70 && showBottomControls
   const showCenterSeeks = containerSize.width > 180 && !isError
-  const showCamera = showCameraButton && containerSize.width > 120 && showBottomControls
+  const showCamera = showCameraButton && containerSize.width > 120 && containerSize.height > 100
 
   return (
     <Pressable
@@ -456,7 +457,7 @@ export const VideoControls: FC<VideoControlsProps> = ({
             style={[
               styles.topBar,
               {
-                paddingTop: safeTop + 10,
+                paddingTop: safeTop + (isCompactHeight ? 4 : 10),
                 paddingLeft: safeLeft + iconSizes.padding * 1.5,
                 paddingRight: safeRight + iconSizes.padding * 1.5,
               },
@@ -541,7 +542,7 @@ export const VideoControls: FC<VideoControlsProps> = ({
               {
                 paddingLeft: safeLeft + iconSizes.padding,
                 paddingRight: safeRight + iconSizes.padding,
-                paddingBottom: safeBottom + 10,
+                paddingBottom: safeBottom + (isCompactHeight ? 4 : 10),
               },
             ]}>
             {showSeek && (
@@ -555,7 +556,7 @@ export const VideoControls: FC<VideoControlsProps> = ({
 
             {showBottomControls && (
               <View style={styles.bottomControlsRow}>
-                {!isRtsp && (
+                {!isRtsp && containerSize.height > 100 && (
                   <Pressable
                     style={styles.iconBtn}
                     onPress={handlePlayPause}
@@ -576,6 +577,7 @@ export const VideoControls: FC<VideoControlsProps> = ({
                 {showFullscreen && (
                   <Pressable
                     style={styles.iconBtn}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     onPress={onToggleFullscreen}
                     accessibilityLabel="Toggle Fullscreen">
                     <FullscreenIcon size={iconSizes.bottom} color="#fff" />
@@ -696,8 +698,7 @@ const styles = StyleSheet.create({
   topBar: {
     alignItems: 'center',
     flexDirection: 'row',
-    paddingBottom: 6,
-    paddingTop: 10,
+    paddingBottom: 2,
   },
   verticalSlider: {
     height: 30,
