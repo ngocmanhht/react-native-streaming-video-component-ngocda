@@ -51,6 +51,8 @@ class ExoPlayerBridge(private val context: Context) {
     var onBuffering: ((isBuffering: Boolean) -> Unit)? = null
     var onError: ((code: Int, message: String) -> Unit)? = null
     var onEnd: (() -> Unit)? = null
+    var onFirstFrameRendered: (() -> Unit)? = null
+    var hasRenderedVideoFrame: Boolean = false
 
     // Whether to loop playback
     var shouldRepeat: Boolean = false
@@ -113,6 +115,10 @@ class ExoPlayerBridge(private val context: Context) {
                                 else -> {}
                             }
                         }
+                        override fun onRenderedFirstFrame() {
+                            hasRenderedVideoFrame = true
+                            onFirstFrameRendered?.invoke()
+                        }
                         override fun onVideoSizeChanged(videoSize: VideoSize) {
                             videoWidth = videoSize.width
                             videoHeight = videoSize.height
@@ -130,6 +136,7 @@ class ExoPlayerBridge(private val context: Context) {
     }
 
     fun load(url: String, headers: Map<String, String>? = null) {
+        hasRenderedVideoFrame = false
         runOnMain {
             val p = ensurePlayerCreated()
             p.stop()

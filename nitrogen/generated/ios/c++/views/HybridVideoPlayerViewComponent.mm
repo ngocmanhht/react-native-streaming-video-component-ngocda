@@ -41,13 +41,20 @@ using namespace margelo::nitro::streamingvideo::views;
   return react::concreteComponentDescriptorProvider<HybridVideoPlayerViewComponentDescriptor>();
 }
 
-- (instancetype) init {
-  if (self = [super init]) {
+- (instancetype) initWithFrame:(CGRect)frame {
+  if (self = [super initWithFrame:frame]) {
+    static const auto defaultProps = std::make_shared<const HybridVideoPlayerViewProps>();
+    _props = defaultProps;
+
     std::shared_ptr<HybridVideoPlayerViewSpec> hybridView = react_native_streaming_video_component_ngocda::react_native_streaming_video_component_ngocdaAutolinking::createVideoPlayerView();
     _hybridView = std::dynamic_pointer_cast<HybridVideoPlayerViewSpecSwift>(hybridView);
     [self updateView];
   }
   return self;
+}
+
+- (instancetype) init {
+  return [self initWithFrame:CGRectZero];
 }
 
 - (void) updateView {

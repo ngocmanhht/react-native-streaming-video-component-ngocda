@@ -21,6 +21,8 @@ final class AVPlayerBridge: NSObject {
   var onBuffering: ((Bool) -> Void)?
   var onError: ((Int, String) -> Void)?
   var onEnd: (() -> Void)?
+  var onFirstVideoFrame: (() -> Void)?
+  private(set) var hasRenderedVideoFrame: Bool = false
 
   // MARK: - Setup
 
@@ -38,9 +40,11 @@ final class AVPlayerBridge: NSObject {
   func detach() {
     removeObservers()
     if let item = player?.currentItem, let output = videoOutput {
+      output.setDelegate(nil, queue: nil)
       item.remove(output)
     }
     videoOutput = nil
+    hasRenderedVideoFrame = false
     playerLayer?.removeFromSuperlayer()
     playerLayer = nil
     player = nil
@@ -83,6 +87,7 @@ final class AVPlayerBridge: NSObject {
   func load(url: String, isLiveStream: Bool = false, headers: [String: String]? = nil) {
     self.isLive = isLiveStream
     removeObservers()
+    hasRenderedVideoFrame = false
     guard let u = URL(string: url) else { return }
 
     // ── AVURLAsset options ─────────────────────────────────────────────────────
@@ -100,6 +105,7 @@ final class AVPlayerBridge: NSObject {
       kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA)
     ]
     let output = AVPlayerItemVideoOutput(pixelBufferAttributes: outputSettings)
+    output.setDelegate(self, queue: DispatchQueue.main)
     item.add(output)
     self.videoOutput = output
 
@@ -403,5 +409,17 @@ final class AVPlayerBridge: NSObject {
     playerLayer = nil
     player = nil
     targetView = nil
+  }
+}
+
+// MARK: - AVPlayerItemOutputPullDelegate
+extension AVPlayerBridge: AVPlayerItemOutputPullDelegate {
+  func outputMediaDataWillChange(_ sender: AVPlayerItemOutput) {
+    if !hasRenderedVideoFrame {
+      hasRenderedVideoFrame = true
+      DispatchQueue.main.async { [weak self] in
+        self?.onFirstVideoFrame?()
+      }
+    }
   }
 }

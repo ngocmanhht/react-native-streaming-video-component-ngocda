@@ -34,6 +34,8 @@ class VlcPlayerBridge(private val context: Context) {
                     "--codec=all",            // Disable hardware decoding completely to prevent MediaCodec SIGABRT crashes on RTSP
                     "--no-mediacodec-dr",
                     "--no-omxil-dr",
+                    "--avcodec-threads=0",     // Multi-threaded decoding for H.265 / HEVC
+                    "--network-caching=2000",
                     "--drop-late-frames",
                     "--skip-frames"
                 )).also { libVLCInstance = it }
@@ -81,6 +83,7 @@ class VlcPlayerBridge(private val context: Context) {
                         }
                     }
                     MediaPlayer.Event.TimeChanged -> {
+                        onBuffering?.invoke(false)
                         onProgress?.invoke(player.time, player.length)
                     }
                     MediaPlayer.Event.EncounteredError -> {

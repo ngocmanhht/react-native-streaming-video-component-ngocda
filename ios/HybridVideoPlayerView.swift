@@ -218,6 +218,9 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
 
   // MARK: - Player lifecycle
 
+  // Cache URLs known to contain H.265 / HEVC in MPEG-TS so subsequent loads directly use VLC
+  private static var h265UrlCache = Set<String>()
+
   /// True when RTSP stream was stopped (pause or error) and needs URL reload on next play.
   private var _rtspNeedsReconnect = false
 
@@ -237,8 +240,17 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
     }
 
     cancelAVFallbackTimer()
-    useVlcFallback = false
+    if HybridVideoPlayerView.h265UrlCache.contains(url) {
+      useVlcFallback = true
+    } else {
+      useVlcFallback = false
+    }
     onStateChange?(.loading)
+
+    if useVlcFallback {
+      loadVlc()
+      return
+    }
 
     switch activeProtocol {
     case .hls, .mp4:
@@ -266,14 +278,42 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
       avBridge?.play()
     }
 
+    // Pre-flight check for HLS streams: Apple AVPlayer CANNOT decode H.265/HEVC in MPEG-TS (.ts).
+    // If the master playlist specifies HEVC (hvc1/hev1) without fMP4 (EXT-X-MAP or .m4s), switch to VLC immediately!
+    let lowerUrl = url.lowercased()
+    if (activeProtocol == .hls || lowerUrl.contains(".m3u8")), let playlistUrl = URL(string: url) {
+      var request = URLRequest(url: playlistUrl)
+      request.timeoutInterval = 2.5
+      self.headers?.forEach { request.setValue($1, forHTTPHeaderField: $0) }
+
+      URLSession.shared.dataTask(with: request) { [weak self] data, _, _ in
+        guard let self = self, let data = data, let text = String(data: data, encoding: .utf8) else { return }
+        let isHevc = text.localizedCaseInsensitiveContains("hvc1") || text.localizedCaseInsensitiveContains("hev1")
+        let isFmp4 = text.localizedCaseInsensitiveContains("EXT-X-MAP") || text.localizedCaseInsensitiveContains(".m4s")
+        if isHevc && !isFmp4 {
+          HybridVideoPlayerView.h265UrlCache.insert(playlistUrl.absoluteString)
+          DispatchQueue.main.async {
+            guard !self.useVlcFallback, (self.activeProtocol == .hls || self.activeProtocol == .mp4) else { return }
+            print("StreamingVideo: HLS stream uses H.265/HEVC in MPEG-TS (unsupported by AVPlayer). Switching to VLC immediately.")
+            self.cancelAVFallbackTimer()
+            self.useVlcFallback = true
+            self.loadVlc()
+          }
+        }
+      }.resume()
+    }
+
     let workItem = DispatchWorkItem { [weak self] in
       guard let self = self, !self.paused, (self.activeProtocol == .hls || self.activeProtocol == .mp4), !self.useVlcFallback else { return }
-      print("StreamingVideo: AVPlayer timeout waiting for playback (2.0s), falling back to VLC")
-      self.useVlcFallback = true
-      self.loadVlc()
+      if !(self.avBridge?.hasRenderedVideoFrame ?? false) {
+        print("StreamingVideo: AVPlayer produced no video frames within 3.5s (likely unsupported H.265 in TS), falling back to VLC")
+        HybridVideoPlayerView.h265UrlCache.insert(self.url)
+        self.useVlcFallback = true
+        self.loadVlc()
+      }
     }
     avFallbackWorkItem = workItem
-    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0, execute: workItem)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 3.5, execute: workItem)
   }
 
   private func loadVlc() {
@@ -481,9 +521,16 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
   // MARK: - Bridge bindings
 
   private func bindAVBridge() {
+    avBridge?.onFirstVideoFrame = { [weak self] in
+      guard let self = self else { return }
+      print("StreamingVideo: AVPlayer rendered first video frame successfully")
+      self.cancelAVFallbackTimer()
+    }
     avBridge?.onReady = { [weak self] duration, size in
       guard let self = self else { return }
-      self.cancelAVFallbackTimer()
+      if self.avBridge?.hasRenderedVideoFrame == true {
+        self.cancelAVFallbackTimer()
+      }
       self.retryCount = 0
       self.onReady?(.init(
         duration: duration,
@@ -497,7 +544,9 @@ class HybridVideoPlayerView: HybridVideoPlayerViewSpec {
     }
     avBridge?.onProgress = { [weak self] current, total, playable in
       guard let self = self else { return }
-      self.cancelAVFallbackTimer()
+      if self.avBridge?.hasRenderedVideoFrame == true {
+        self.cancelAVFallbackTimer()
+      }
       self.onProgress?(.init(currentTime: current, duration: total, playableDuration: playable))
     }
     avBridge?.onBuffering = { [weak self] isBuffering in

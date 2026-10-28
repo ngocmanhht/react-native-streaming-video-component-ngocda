@@ -83,23 +83,28 @@ final class VLCPlayerBridge: NSObject, VLCMediaPlayerDelegate {
 
     if isHls {
       // 💡 Cho luồng HLS live:
-      // Chunks HLS tải qua HTTP theo đợt (2-3s/chunk).
-      // Buffer 3500ms để luôn có sẵn ít nhất 1.5 chunks trong bộ nhớ đệm, tránh khựng hình.
-      // Không đặt clock-jitter=0 và clock-synchro=0 vì HTTP chunking có độ trễ tự nhiên giữa các chunk,
-      // để VLC tự đồng bộ PTS mượt mà không bị drop khung hình.
-      media.addOption(":network-caching=3500")
-      media.addOption(":live-caching=3500")
-      media.addOption(":file-caching=3000")
+      media.addOption(":network-caching=2000")
+      media.addOption(":live-caching=2000")
+      media.addOption(":file-caching=2000")
+      media.addOption(":avcodec-threads=0")
+      media.addOption(":drop-late-frames")
+      media.addOption(":skip-frames")
     } else if isRtsp {
       media.addOption(":rtsp-tcp")
-      media.addOption(":network-caching=3000") // 💡 Tăng lên 3000ms
+      media.addOption(":network-caching=2000")
       media.addOption(":live-caching=2000")
-      media.addOption(":rtsp-caching=3000")
+      media.addOption(":rtsp-caching=2000")
       media.addOption(":clock-jitter=500")
       media.addOption(":clock-synchro=0")
+      media.addOption(":avcodec-threads=0")
+      media.addOption(":drop-late-frames")
+      media.addOption(":skip-frames")
     } else {
-      media.addOption(":network-caching=3000")
-      media.addOption(":live-caching=3000")
+      media.addOption(":network-caching=2000")
+      media.addOption(":live-caching=2000")
+      media.addOption(":avcodec-threads=0")
+      media.addOption(":drop-late-frames")
+      media.addOption(":skip-frames")
     }
 
     if let h = headers {
@@ -114,6 +119,8 @@ final class VLCPlayerBridge: NSObject, VLCMediaPlayerDelegate {
 
     #if targetEnvironment(simulator)
     media.addOption(":avcodec-hw=none")
+    #else
+    media.addOption(":avcodec-hw=any")
     #endif
 
     player.media = media
@@ -168,8 +175,10 @@ final class VLCPlayerBridge: NSObject, VLCMediaPlayerDelegate {
     case .buffering:
       onBuffering?(true)
     case .error:
+      onBuffering?(false)
       onError?(-1, "VLCPlayer stream error")
     case .ended:
+      onBuffering?(false)
       if _isRepeating {
         // Seek to beginning and replay
         player.time = VLCTime(int: 0)
@@ -178,6 +187,8 @@ final class VLCPlayerBridge: NSObject, VLCMediaPlayerDelegate {
         onEnd?()
       }
     case .stopped:
+      // Internal stop during load/reset/stop. Must NOT invoke onEnd?() because
+      // in React Native onEnd sets { paused: true } and triggers pause!
       break
     default: break
     }
