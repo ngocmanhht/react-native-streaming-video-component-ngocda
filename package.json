@@ -23,7 +23,7 @@
     "nitro.json"
   ],
   "scripts": {
-    "codegen": "npx nitrogen",
+    "codegen": "nitrogen",
     "test": "jest",
     "typecheck": "tsc --noEmit",
     "prepare": "nitrogen && bob build",
