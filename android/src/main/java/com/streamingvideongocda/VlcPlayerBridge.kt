@@ -31,7 +31,8 @@ class VlcPlayerBridge(private val context: Context) {
             return libVLCInstance ?: synchronized(this) {
                 libVLCInstance ?: LibVLC(context.applicationContext, arrayListOf(
                     "--rtsp-tcp",             // Force TCP for RTSP (more reliable over NAT/firewall)
-                    "--codec=all",            // Disable hardware decoding completely to prevent MediaCodec SIGABRT crashes on RTSP
+                    "--codec=avcodec,all",    // Prioritize avcodec software decoding
+                    "--avcodec-hw=none",      // Disable hardware decoding completely to prevent MediaCodec SIGABRT crashes on RTSP
                     "--no-mediacodec-dr",
                     "--no-omxil-dr",
                     "--avcodec-threads=0",     // Multi-threaded decoding for H.265 / HEVC
@@ -131,24 +132,28 @@ class VlcPlayerBridge(private val context: Context) {
                 addOption(":network-caching=3500")
                 addOption(":live-caching=3500")
                 addOption(":file-caching=3000")
-                addOption(":codec=all")
+                addOption(":codec=avcodec,all")
+                addOption(":avcodec-hw=none")
                 addOption(":no-mediacodec-dr")
                 addOption(":no-omxil-dr")
             } else if (isRtsp) {
                 addOption(":rtsp-tcp")
-                addOption(":network-caching=3000") // 💡 Tăng lên 3000ms để đủ chờ I-Frame của Hikvision
-                addOption(":rtsp-caching=3000")
+                addOption(":network-caching=2000")
+                addOption(":rtsp-caching=2000")
                 addOption(":clock-jitter=500")
                 addOption(":clock-synchro=0")
-                addOption(":codec=all")            // 💡 Tránh crash SIGABRT ở tầng MediaCodec NDK
+                addOption(":codec=avcodec,all")            // 💡 Tránh crash SIGABRT ở tầng MediaCodec NDK
+                addOption(":avcodec-hw=none")
                 addOption(":no-mediacodec-dr")
                 addOption(":no-omxil-dr")
+                addOption(":avcodec-threads=0")
                 addOption(":drop-late-frames")
                 addOption(":skip-frames")
             } else {
-                addOption(":network-caching=3000")
-                addOption(":live-caching=3000")
-                addOption(":codec=all")
+                addOption(":network-caching=2000")
+                addOption(":live-caching=2000")
+                addOption(":codec=avcodec,all")
+                addOption(":avcodec-hw=none")
                 addOption(":no-mediacodec-dr")
                 addOption(":no-omxil-dr")
             }
@@ -406,6 +411,11 @@ class VlcPlayerBridge(private val context: Context) {
             currentMedia?.release()
             currentMedia = null
         } catch (_: Exception) {}
+        onReady = null
+        onProgress = null
+        onBuffering = null
+        onError = null
+        onEnd = null
         // Since libVLC is a global singleton, we do not release it here
         // (individual players releasing LibVLC would break other active players).
     }

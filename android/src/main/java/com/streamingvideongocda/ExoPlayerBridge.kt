@@ -9,6 +9,12 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.hls.DefaultHlsExtractorFactory
+import androidx.media3.exoplayer.hls.HlsMediaSource
+import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import java.io.File
 import java.io.FileOutputStream
 import androidx.media3.common.VideoSize
@@ -155,16 +161,26 @@ class ExoPlayerBridge(private val context: Context) {
             } else {
                 MediaItem.fromUri(url)
             }
+            val httpDataSourceFactory = DefaultHttpDataSource.Factory()
             if (headers != null && headers.isNotEmpty()) {
-                val dataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
-                    .setDefaultRequestProperties(headers)
-                val mediaSource = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(context)
+                httpDataSourceFactory.setDefaultRequestProperties(headers)
+            }
+            val dataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
+
+            val isHls = url.lowercase().contains(".m3u8") || isLive
+            val mediaSource = if (isHls) {
+                val extractorFlags = DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES or
+                        DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS
+                val hlsExtractorFactory = DefaultHlsExtractorFactory(extractorFlags, true)
+                HlsMediaSource.Factory(dataSourceFactory)
+                    .setExtractorFactory(hlsExtractorFactory)
+                    .createMediaSource(mediaItem)
+            } else {
+                DefaultMediaSourceFactory(context)
                     .setDataSourceFactory(dataSourceFactory)
                     .createMediaSource(mediaItem)
-                p.setMediaSource(mediaSource)
-            } else {
-                p.setMediaItem(mediaItem)
             }
+            p.setMediaSource(mediaSource)
 
             p.repeatMode = if (shouldRepeat) Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_OFF
             p.volume = if (isMuted) 0f else currentVolume
